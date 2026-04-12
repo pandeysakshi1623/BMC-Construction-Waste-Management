@@ -8,14 +8,13 @@
 build/
 flutter_*.png
 
-# Flutter plugins
 .flutter-plugins
 .flutter-plugins-dependencies
 
 # Android
 android/.gradle/
 android/app/build/
-**/android/local.properties
+android/local.properties
 *.jks
 
 # iOS
@@ -44,11 +43,8 @@ __pycache__/
 *.pyo
 *.pyd
 
-# uploads & data
 uploads/
 data_source/
-
-# API schema
 openapi.json
 
 # ================= GENERAL =================
@@ -57,6 +53,7 @@ openapi.json
 .DS_Store
 .idea/
 .vscode/
+*.iml
 
 #<<<<<<< HEAD
 ## Miscellaneous
@@ -200,3 +197,37 @@ openapi.json
 #data_source/
 #openapi.json
 #>>>>>>> origin/backend
+=======
+*.iml
+
+# Android
+android/.gradle/
+android/captures/
+android/local.properties
+android/key.properties
+*.jks
+
+# iOS
+ios/.symlinks/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+ios/Pods/
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+
+# Misc
+*.log
+*.DS_Store
+>>>>>>> flutter
