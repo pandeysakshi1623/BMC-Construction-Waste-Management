@@ -8,9 +8,11 @@ import 'services/notification_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/role_selection_screen.dart';
+import 'screens/auth/signup_screen.dart';
 // Contractor
 import 'screens/contractor/contractor_dashboard_screen.dart';
 import 'screens/contractor/site_registration_screen.dart';
+import 'screens/contractor/alerts_screen.dart';
 import 'screens/contractor/qr_display_screen.dart';
 import 'screens/contractor/pickup_scheduling_screen.dart';
 import 'screens/contractor/upload_proof_screen.dart';
@@ -22,6 +24,8 @@ import 'screens/citizen/awareness_screen.dart';
 import 'screens/driver/pickups_screen.dart';
 import 'screens/driver/qr_scanner_screen.dart';
 import 'screens/driver/upload_disposal_screen.dart';
+// BMC
+import 'screens/bmc/bmc_dashboard_screen.dart';
 
 void main() {
   runApp(
@@ -66,10 +70,12 @@ class MyApp extends StatelessWidget {
       routes: {
         '/splash':                     (_) => const SplashScreen(),
         '/login':                      (_) => const LoginScreen(),
+        '/signup':                     (_) => const SignupScreen(),
         '/role-selection':             (_) => const RoleSelectionScreen(),
         // Contractor
         '/contractor/dashboard':       (_) => const ContractorDashboardScreen(),
         '/contractor/register-site':   (_) => const SiteRegistrationScreen(),
+        '/contractor/alerts':          (_) => const AlertsScreen(role: 'contractor'),
         '/contractor/qr-display':      (_) => const QrDisplayScreen(),
         '/contractor/schedule-pickup': (_) => const PickupSchedulingScreen(),
         '/contractor/upload-proof':    (_) => const UploadProofScreen(),
@@ -81,6 +87,8 @@ class MyApp extends StatelessWidget {
         '/driver/pickups':             (_) => const PickupsScreen(),
         '/driver/qr-scanner':          (_) => const QrScannerScreen(),
         '/driver/upload-disposal':     (_) => const UploadDisposalScreen(),
+        // BMC
+        '/bmc/dashboard':              (_) => const BmcDashboardScreen(),
       },
     );
   }

@@ -18,25 +18,22 @@ class _QrDisplayScreenState extends State<QrDisplayScreen> {
   final GlobalKey _qrKey = GlobalKey();
   bool _sharing = false;
 
-  Future<void> _shareQr(SiteModel site) async {
+  Future<void> _shareQr(SiteModel site, String qrData) async {
     setState(() => _sharing = true);
     try {
-      // Capture the QR widget as an image
       final boundary =
           _qrKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final pngBytes = byteData!.buffer.asUint8List();
 
-      // Save to temp file
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/qr_${site.id}.png');
       await file.writeAsBytes(pngBytes);
 
-      // Share
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'QR Code for site: ${site.name}\nCode: ${site.qrCode}',
+        text: 'QR Code for site: ${site.name}\nCode: $qrData',
         subject: 'Site QR Code - ${site.name}',
       );
     } catch (e) {
@@ -56,6 +53,9 @@ class _QrDisplayScreenState extends State<QrDisplayScreen> {
   @override
   Widget build(BuildContext context) {
     final site = ModalRoute.of(context)!.settings.arguments as SiteModel;
+
+    // Generate QR data: use backend qrCode if present, otherwise derive from site ID
+    final qrData = site.qrCode.isNotEmpty ? site.qrCode : 'SITE_${site.id}';
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -85,13 +85,12 @@ class _QrDisplayScreenState extends State<QrDisplayScreen> {
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: [
-                      // RepaintBoundary allows us to capture QR as image
                       RepaintBoundary(
                         key: _qrKey,
                         child: Container(
                           color: Colors.white,
                           child: QrImageView(
-                            data: site.qrCode,
+                            data: qrData,
                             version: QrVersions.auto,
                             size: 200,
                             backgroundColor: Colors.white,
@@ -103,9 +102,10 @@ class _QrDisplayScreenState extends State<QrDisplayScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Text('QR Code: ${site.qrCode}',
+                      Text(qrData,
                           style: const TextStyle(
-                              fontWeight: FontWeight.w500)),
+                              fontWeight: FontWeight.w500, fontSize: 12),
+                          textAlign: TextAlign.center),
                     ],
                   ),
                 ),
@@ -115,7 +115,7 @@ class _QrDisplayScreenState extends State<QrDisplayScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: _sharing ? null : () => _shareQr(site),
+                      onPressed: _sharing ? null : () => _shareQr(site, qrData),
                       icon: _sharing
                           ? const SizedBox(
                               width: 14,

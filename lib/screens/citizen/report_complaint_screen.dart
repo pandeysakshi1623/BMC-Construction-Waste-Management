@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/image_service.dart';
 import '../../services/location_service.dart';
@@ -64,22 +66,27 @@ class _ReportComplaintScreenState extends State<ReportComplaintScreen> {
       _snack('Please fetch your GPS location', isError: true); return;
     }
 
+    // Use resolved address if available, fallback to lat/lng string
+    final locationStr = _address ?? LocationService.format(_lat!, _lng!);
+
     setState(() => _submitting = true);
     try {
-      final ok = await ApiService.submitComplaint(
+      final token = context.read<AuthProvider>().user?.token ?? '';
+      await ApiService.submitComplaint(
         description: _descController.text.trim(),
-        latitude: _lat!,
-        longitude: _lng!,
-        imagePath: _image!.path,
+        location: locationStr,
+        token: token,
       );
       if (mounted) {
-        _snack(ok ? 'Complaint submitted!' : 'Submission failed', isError: !ok);
-        if (ok) Navigator.pop(context);
+        _snack('Complaint submitted successfully');
+        Navigator.pop(context);
       }
-    } catch (_) {
-      _snack('An error occurred. Try again.', isError: true);
+    } catch (e) {
+      if (mounted) {
+        _snack(e.toString().replaceFirst('Exception: ', ''), isError: true);
+      }
     } finally {
-      setState(() => _submitting = false);
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

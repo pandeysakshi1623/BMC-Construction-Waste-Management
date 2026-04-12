@@ -100,3 +100,33 @@ async def request_pickup(
     await pickup_collection.insert_one(pickup_dict)
     
     return Pickup(**pickup_dict)
+
+
+@router.post("/upload-proof")
+async def upload_pickup_proof(
+    pickup_id: str = Form(...),
+    image: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload disposal proof image for a completed pickup."""
+    pickup = await pickup_collection.find_one({"pickup_id": pickup_id})
+    if not pickup:
+        raise HTTPException(status_code=404, detail="Pickup not found")
+
+    contents = await image.read()
+    image_filename = f"{uuid.uuid4()}_{image.filename}"
+    file_path = f"uploads/{image_filename}"
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    await pickup_collection.update_one(
+        {"pickup_id": pickup_id},
+        {"$set": {"disposal_proof_url": f"/static/{image_filename}"}},
+    )
+
+    print(f"Pickup proof uploaded: {file_path}")
+
+    return {
+        "message": "Pickup proof uploaded",
+        "image_url": f"/static/{image_filename}",
+    }

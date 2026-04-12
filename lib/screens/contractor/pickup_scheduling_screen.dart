@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/site_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 
 class PickupSchedulingScreen extends StatefulWidget {
@@ -34,17 +36,27 @@ class _PickupSchedulingScreenState extends State<PickupSchedulingScreen> {
     setState(() => _loading = true);
     final dateStr =
         '${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}';
-    final success = await ApiService.schedulePickup(site.id, dateStr);
-    setState(() => _loading = false);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(success
-            ? 'Pickup scheduled for $dateStr'
-            : 'Failed to schedule. Try again.'),
-        backgroundColor: success ? Colors.green : Colors.red,
-      ));
-      if (success) Navigator.pop(context);
+    try {
+      final token = context.read<AuthProvider>().user?.token ?? '';
+      await ApiService.schedulePickup(site.id, dateStr, token: token);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Pickup scheduled for $dateStr'),
+          backgroundColor: Colors.green,
+        ));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 

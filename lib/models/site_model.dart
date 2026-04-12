@@ -22,13 +22,16 @@ class SiteModel {
   factory SiteModel.fromJson(Map<String, dynamic> json) {
     return SiteModel(
       id: json['id'] ?? '',
-      name: json['name'] ?? '',
+      // backend uses 'site_name', fallback to 'name' for dummy compatibility
+      name: json['site_name'] ?? json['name'] ?? '',
       location: json['location'] ?? '',
       area: (json['area'] ?? 0).toDouble(),
-      expectedWaste: (json['expected_waste'] ?? 0).toDouble(),
+      // backend uses 'waste_estimated', fallback to 'expected_waste'
+      expectedWaste: (json['waste_estimated'] ?? json['expected_waste'] ?? 0).toDouble(),
       qrCode: json['qr_code'] ?? '',
       pickupStatus: json['pickup_status'] ?? 'Pending',
-      actualWaste: (json['actual_waste'] ?? 0).toDouble(),
+      // backend uses 'waste_actual', fallback to 'actual_waste'
+      actualWaste: (json['waste_actual'] ?? json['actual_waste'] ?? 0).toDouble(),
     );
   }
 }

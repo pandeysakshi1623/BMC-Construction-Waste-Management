@@ -41,6 +41,9 @@ class _SplashScreenState extends State<SplashScreen> {
         case 'driver':
           Navigator.pushReplacementNamed(context, '/driver/pickups');
           break;
+        case 'bmc':
+          Navigator.pushReplacementNamed(context, '/bmc/dashboard');
+          break;
         default:
           Navigator.pushReplacementNamed(context, '/login');
       }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/pickup_model.dart';
 import '../../models/site_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/driver_info_card.dart';
@@ -29,10 +31,12 @@ class _ContractorDashboardScreenState
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
+      final token = context.read<AuthProvider>().user?.token ?? '';
+
       // Load both in parallel
       final results = await Future.wait([
-        ApiService.getContractorSites(),
-        ApiService.getContractorPickups(),
+        ApiService.getContractorSites(token: token),
+        ApiService.getContractorPickups(token: token),
       ]);
 
       final sites = (results[0] as List<Map<String, dynamic>>)
@@ -49,8 +53,15 @@ class _ContractorDashboardScreenState
         _sites = sites;
         _pickupBySiteId = pickupMap;
       });
-    } catch (_) {
-      _showSnack('Failed to load data', isError: true);
+    } catch (e) {
+      if (e.toString().contains('401') || e.toString().contains('Unauthorized')) {
+        if (mounted) {
+          await context.read<AuthProvider>().handleUnauthorized();
+          Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+        }
+      } else {
+        _showSnack('Failed to load data', isError: true);
+      }
     } finally {
       setState(() => _loading = false);
     }
@@ -70,6 +81,14 @@ class _ContractorDashboardScreenState
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Contractor Dashboard',
+      extraActions: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+          tooltip: 'Alerts',
+          onPressed: () =>
+              Navigator.pushNamed(context, '/contractor/alerts'),
+        ),
+      ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.pushNamed(context, '/contractor/register-site');

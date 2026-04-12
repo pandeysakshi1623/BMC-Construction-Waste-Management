@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/site_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/image_service.dart';
 import '../../widgets/loading_button.dart';
@@ -25,6 +27,7 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
 
   Future<void> _pickImage() async {
     final file = await ImageService.pickImage(context);
+    print('Image state: $file');
     if (file != null) setState(() => _image = file);
   }
 
@@ -39,16 +42,18 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
 
     setState(() => _submitting = true);
     try {
+      final token = context.read<AuthProvider>().user?.token ?? '';
       final ok = await ApiService.uploadProof(
-          site.id, _image!.path, double.parse(_quantityController.text));
+          site.id, _image!.path, double.parse(_quantityController.text),
+          token: token);
       if (mounted) {
         _snack(ok ? 'Proof uploaded!' : 'Upload failed', isError: !ok);
         if (ok) Navigator.pop(context);
       }
-    } catch (_) {
-      _snack('An error occurred', isError: true);
+    } catch (e) {
+      _snack(e.toString().replaceFirst('Exception: ', ''), isError: true);
     } finally {
-      setState(() => _submitting = false);
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

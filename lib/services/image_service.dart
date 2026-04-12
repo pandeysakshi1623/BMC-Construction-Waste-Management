@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -5,9 +6,10 @@ import 'package:image_picker/image_picker.dart';
 class ImageService {
   static final _picker = ImagePicker();
 
-  /// Shows a bottom sheet and returns the picked File, or null if cancelled.
+  /// Shows a bottom sheet, waits for the user to pick an image,
+  /// and returns the File — or null if cancelled.
   static Future<File?> pickImage(BuildContext context) async {
-    File? result;
+    final completer = Completer<File?>();
 
     await showModalBottomSheet(
       context: context,
@@ -21,7 +23,8 @@ class ImageService {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
                   color: Colors.grey[300],
@@ -39,10 +42,12 @@ class ImageService {
                 title: const Text('Take Photo'),
                 subtitle: const Text('Use your camera'),
                 onTap: () async {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // close sheet first
                   final picked = await _picker.pickImage(
                       source: ImageSource.camera, imageQuality: 75);
-                  if (picked != null) result = File(picked.path);
+                  final file = picked != null ? File(picked.path) : null;
+                  print('Selected image: ${file?.path}');
+                  if (!completer.isCompleted) completer.complete(file);
                 },
               ),
               ListTile(
@@ -53,10 +58,12 @@ class ImageService {
                 title: const Text('Choose from Gallery'),
                 subtitle: const Text('Pick an existing photo'),
                 onTap: () async {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // close sheet first
                   final picked = await _picker.pickImage(
                       source: ImageSource.gallery, imageQuality: 75);
-                  if (picked != null) result = File(picked.path);
+                  final file = picked != null ? File(picked.path) : null;
+                  print('Selected image: ${file?.path}');
+                  if (!completer.isCompleted) completer.complete(file);
                 },
               ),
               const SizedBox(height: 8),
@@ -64,8 +71,13 @@ class ImageService {
           ),
         ),
       ),
-    );
+    ).then((_) {
+      // Sheet dismissed without selecting (back button / tap outside)
+      if (!completer.isCompleted) completer.complete(null);
+    });
 
+    final result = await completer.future;
+    print('Image state: $result');
     return result;
   }
 }

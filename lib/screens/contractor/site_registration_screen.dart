@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../models/site_model.dart';
 
@@ -14,7 +16,6 @@ class _SiteRegistrationScreenState extends State<SiteRegistrationScreen> {
   final _nameController = TextEditingController();
   final _locationController = TextEditingController();
   final _areaController = TextEditingController();
-  final _wasteController = TextEditingController();
   bool _loading = false;
 
   @override
@@ -22,7 +23,6 @@ class _SiteRegistrationScreenState extends State<SiteRegistrationScreen> {
     _nameController.dispose();
     _locationController.dispose();
     _areaController.dispose();
-    _wasteController.dispose();
     super.dispose();
   }
 
@@ -30,19 +30,32 @@ class _SiteRegistrationScreenState extends State<SiteRegistrationScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
 
-    final data = await ApiService.registerSite(
-      name: _nameController.text.trim(),
-      location: _locationController.text.trim(),
-      area: double.parse(_areaController.text.trim()),
-      expectedWaste: double.parse(_wasteController.text.trim()),
-    );
+    try {
+      final token = context.read<AuthProvider>().user?.token ?? '';
+      final data = await ApiService.registerSite(
+        name: _nameController.text.trim(),
+        location: _locationController.text.trim(),
+        area: _areaController.text.trim(),
+        token: token,
+      );
 
-    setState(() => _loading = false);
-
-    if (mounted) {
-      final site = SiteModel.fromJson(data);
-      Navigator.pushReplacementNamed(context, '/contractor/qr-display',
-          arguments: site);
+      if (mounted) {
+        final site = SiteModel.fromJson(data);
+        Navigator.pushReplacementNamed(
+          context,
+          '/contractor/qr-display',
+          arguments: site,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -82,20 +95,10 @@ class _SiteRegistrationScreenState extends State<SiteRegistrationScreen> {
                 icon: Icons.square_foot,
                 keyboardType: TextInputType.number,
                 validator: (v) {
-                  if (v!.isEmpty) return 'Required';
-                  if (double.tryParse(v) == null) return 'Enter a valid number';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildField(
-                controller: _wasteController,
-                label: 'Expected Waste (tonnes)',
-                icon: Icons.delete_outline,
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  if (v!.isEmpty) return 'Required';
-                  if (double.tryParse(v) == null) return 'Enter a valid number';
+                  if (v == null || v.isEmpty) return 'Required';
+                  if (int.tryParse(v.trim()) == null) {
+                    return 'Enter a whole number (e.g. 500)';
+                  }
                   return null;
                 },
               ),

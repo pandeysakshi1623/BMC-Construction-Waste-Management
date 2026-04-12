@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/pickup_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/image_service.dart';
 import '../../widgets/loading_button.dart';
@@ -18,6 +20,7 @@ class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
 
   Future<void> _pickImage() async {
     final file = await ImageService.pickImage(context);
+    print('Image state: $file');
     if (file != null) setState(() => _image = file);
   }
 
@@ -32,7 +35,9 @@ class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
 
     setState(() => _submitting = true);
     try {
-      final ok = await ApiService.uploadDisposalProof(pickup.id, _image!.path);
+      final token = context.read<AuthProvider>().user?.token ?? '';
+      final ok = await ApiService.uploadDisposalProof(
+          pickup.id, _image!.path, token: token);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(ok ? 'Proof uploaded!' : 'Upload failed'),
@@ -40,13 +45,15 @@ class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
         ));
         if (ok) Navigator.pushReplacementNamed(context, '/driver/pickups');
       }
-    } catch (_) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('An error occurred'),
-        backgroundColor: Colors.red,
-      ));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ));
+      }
     } finally {
-      setState(() => _submitting = false);
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

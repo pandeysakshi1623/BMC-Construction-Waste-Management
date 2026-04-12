@@ -11,9 +11,10 @@ class AuthProvider extends ChangeNotifier {
 
   UserModel? get user => _user;
   bool get isLoading => _isLoading;
-  bool get isLoggedIn => _user != null && _user!.role.isNotEmpty;
+  bool get isLoggedIn => _user != null && _user!.token.isNotEmpty;
   bool get initialized => _initialized;
   String? get error => _error;
+  String get role => _user?.role ?? '';
 
   AuthProvider() {
     _loadFromPrefs();
@@ -22,24 +23,20 @@ class AuthProvider extends ChangeNotifier {
   /// Restore session on app start
   Future<void> _loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getString('user_id');
+    final token = prefs.getString('token');
     final email = prefs.getString('user_email');
-    final role = prefs.getString('user_role');
-    final token = prefs.getString('user_token');
+    final role = prefs.getString('role'); // canonical key
 
-    if (id != null && email != null && role != null && token != null && role.isNotEmpty) {
-      _user = UserModel(id: id, email: email, role: role, token: token);
+    if (token != null && token.isNotEmpty && email != null) {
+      _user = UserModel(
+        id: '',
+        email: email,
+        role: role ?? '',
+        token: token,
+      );
     }
     _initialized = true;
     notifyListeners();
-  }
-
-  Future<void> _saveToPrefs(UserModel user) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_id', user.id);
-    await prefs.setString('user_email', user.email);
-    await prefs.setString('user_role', user.role);
-    await prefs.setString('user_token', user.token);
   }
 
   Future<void> _clearPrefs() async {
@@ -47,22 +44,70 @@ class AuthProvider extends ChangeNotifier {
     await prefs.clear();
   }
 
-  Future<bool> login(String email, String password) async {
+  /// Returns the home route based on role from backend
+  String _homeRouteForRole(String role) {
+    switch (role) {
+      case 'contractor': return '/contractor/dashboard';
+      case 'driver':     return '/driver/pickups';
+      case 'citizen':    return '/citizen/complaints';
+      case 'bmc':        return '/bmc/dashboard';
+      default:           return '/role-selection'; // fallback
+    }
+  }
+
+  /// Login — calls role-specific endpoint, forces correct role in prefs, returns home route
+  Future<String?> login(String username, String password, {String role = ''}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final data = await ApiService.login(email, password);
-      _user = UserModel.fromJson(data);
+      Map<String, dynamic> data;
+      String resolvedRole;
+
+      if (role == 'driver') {
+        // Driver uses same endpoint as contractor — force role on frontend
+        data = await ApiService.login(username, password);
+        resolvedRole = 'driver'; // always override regardless of backend response
+
+      } else if (role == 'bmc') {
+        // BMC endpoint does not return role field — force it
+        data = await ApiService.loginBmc(username, password);
+        resolvedRole = 'bmc'; // always override
+
+      } else if (role == 'citizen') {
+        data = await ApiService.loginCitizen(username, password);
+        // Use backend role if returned, else fall back to selected
+        final backendRole = (data['role'] as String?) ?? '';
+        resolvedRole = backendRole.isNotEmpty ? backendRole : 'citizen';
+
+      } else {
+        // contractor (default)
+        data = await ApiService.login(username, password);
+        // Use backend role if returned, else fall back to selected
+        final backendRole = (data['role'] as String?) ?? '';
+        resolvedRole = backendRole.isNotEmpty ? backendRole : role;
+      }
+
+      final token = data['access_token'] as String;
+
+      _user = UserModel(id: '', email: username, role: resolvedRole, token: token);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', token);
+      await prefs.setString('user_email', username);
+      await prefs.setString('role', resolvedRole); // single canonical key
+
+      print('Logged in as: $resolvedRole'); // debug
+
       _isLoading = false;
       notifyListeners();
-      return true;
+      return _homeRouteForRole(resolvedRole);
     } catch (e) {
-      _error = 'Login failed. Please try again.';
+      _error = e.toString().replaceFirst('Exception: ', '');
       _isLoading = false;
       notifyListeners();
-      return false;
+      return null;
     }
   }
 
@@ -74,12 +119,20 @@ class AuthProvider extends ChangeNotifier {
         role: role,
         token: _user!.token,
       );
-      await _saveToPrefs(_user!);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('role', role); // canonical key
       notifyListeners();
     }
   }
 
   Future<void> logout() async {
+    _user = null;
+    await _clearPrefs();
+    notifyListeners();
+  }
+
+  /// Call this when any API returns 401 — clears session and forces re-login
+  Future<void> handleUnauthorized() async {
     _user = null;
     await _clearPrefs();
     notifyListeners();
