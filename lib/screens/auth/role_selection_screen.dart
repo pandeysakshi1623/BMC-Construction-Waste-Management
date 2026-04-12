@@ -1,124 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/role_provider.dart';
 
+/// Fallback screen shown when the backend doesn't return a clear role.
+/// Should rarely appear in normal flow.
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key});
-
-  Future<void> _selectRole(BuildContext context, AppRole role) async {
-    await context.read<AuthProvider>().setRole(role.name);
-    await context.read<RoleProvider>().switchRole(role);
-    if (context.mounted) {
-      Navigator.pushReplacementNamed(context, role.homeRoute);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Select Your Role'),
+        title: const Text('Session Error'),
         backgroundColor: Colors.orange,
         foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 24),
-            const Text(
-              'Who are you?',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Select your role to continue',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 40),
-            _RoleCard(
-              icon: Icons.engineering,
-              title: 'Contractor',
-              subtitle: 'Manage construction sites and waste pickups',
-              color: Colors.blue,
-              onTap: () => _selectRole(context, AppRole.contractor),
-            ),
-            const SizedBox(height: 16),
-            _RoleCard(
-              icon: Icons.person,
-              title: 'Citizen',
-              subtitle: 'Report waste complaints in your area',
-              color: Colors.green,
-              onTap: () => _selectRole(context, AppRole.citizen),
-            ),
-            const SizedBox(height: 16),
-            _RoleCard(
-              icon: Icons.local_shipping,
-              title: 'Driver',
-              subtitle: 'View and complete assigned waste pickups',
-              color: Colors.deepOrange,
-              onTap: () => _selectRole(context, AppRole.driver),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RoleCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _RoleCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+      body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircleAvatar(
-                backgroundColor: color.withOpacity(0.15),
-                radius: 28,
-                child: Icon(icon, color: color, size: 28),
+              const Icon(Icons.warning_amber_rounded,
+                  size: 64, color: Colors.orange),
+              const SizedBox(height: 20),
+              const Text(
+                'Role Not Determined',
+                style:
+                    TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(subtitle,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                  ],
+              const SizedBox(height: 12),
+              Text(
+                'Your account role could not be determined.\n'
+                'Please log in again with the correct role selected.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  await context.read<AuthProvider>().logout();
+                  if (context.mounted) {
+                    Navigator.pushNamedAndRemoveUntil(
+                        context, '/login', (_) => false);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 12),
                 ),
+                icon: const Icon(Icons.login),
+                label: const Text('Back to Login'),
               ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
             ],
           ),
         ),

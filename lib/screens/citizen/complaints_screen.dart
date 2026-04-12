@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/complaint_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
-import '../../services/location_service.dart';
 import '../../services/notification_service.dart';
+import '../../utils/app_theme.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/status_chip.dart';
 
 class ComplaintsScreen extends StatefulWidget {
   const ComplaintsScreen({super.key});
-
   @override
   State<ComplaintsScreen> createState() => _ComplaintsScreenState();
 }
@@ -16,51 +17,31 @@ class ComplaintsScreen extends StatefulWidget {
 class _ComplaintsScreenState extends State<ComplaintsScreen> {
   List<ComplaintModel> _complaints = [];
   bool _loading = true;
-  final Map<String, String> _addresses = {};
-
-  // Tracks which complaint IDs were already resolved — prevents re-notifying
-  final Set<String> _alreadyNotified = {};
+  final Set<String> _notified = {};
 
   @override
-  void initState() {
-    super.initState();
-    _load();
-  }
+  void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final data = await ApiService.getComplaints();
-      final loaded = data.map((e) => ComplaintModel.fromJson(e)).toList();
-
-      // Fire notification for any newly resolved complaints
-      for (final complaint in loaded) {
-        if (complaint.status.toLowerCase() == 'resolved' &&
-            !_alreadyNotified.contains(complaint.id)) {
-          _alreadyNotified.add(complaint.id);
-          NotificationService.complaintResolved(complaint.description);
+      final token = context.read<AuthProvider>().user?.token ?? '';
+      final data = await ApiService.getComplaints(token: token);
+      final loaded = data.map(ComplaintModel.fromJson).toList();
+      for (final c in loaded) {
+        if (c.status.toLowerCase() == 'resolved' &&
+            !_notified.contains(c.id)) {
+          _notified.add(c.id);
+          NotificationService.complaintResolved(c.description);
         }
       }
-
       setState(() => _complaints = loaded);
-
-      // Resolve addresses in background — don't block the list from showing
-      for (final complaint in loaded) {
-        if (!_addresses.containsKey(complaint.id)) {
-          final address = await LocationService.reverseGeocode(
-              complaint.latitude, complaint.longitude);
-          if (mounted) {
-            setState(() => _addresses[complaint.id] = address);
-          }
-        }
-      }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Failed to load complaints'),
-              backgroundColor: Colors.red),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Failed to load complaints'),
+          backgroundColor: AppTheme.error,
+        ));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -73,10 +54,9 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
       title: 'My Complaints',
       extraActions: [
         IconButton(
-          icon: const Icon(Icons.eco, color: Colors.white),
+          icon: const Icon(Icons.eco_rounded),
           tooltip: 'Waste Awareness',
-          onPressed: () =>
-              Navigator.pushNamed(context, '/citizen/awareness'),
+          onPressed: () => Navigator.pushNamed(context, '/citizen/awareness'),
         ),
       ],
       floatingActionButton: FloatingActionButton.extended(
@@ -84,93 +64,89 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
           await Navigator.pushNamed(context, '/citizen/report');
           _load();
         },
-        backgroundColor: Colors.green,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Report', style: TextStyle(color: Colors.white)),
+        backgroundColor: AppTheme.citizen,
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: const Text('Report',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _complaints.isEmpty
-              ? _emptyState()
+              ? _EmptyState()
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(
+                        AppTheme.spMD, AppTheme.spMD,
+                        AppTheme.spMD, 100),
                     itemCount: _complaints.length,
-                    itemBuilder: (_, i) => _ComplaintCard(
-                        complaint: _complaints[i],
-                        address: _addresses[_complaints[i].id],
-                      ),
+                    itemBuilder: (_, i) =>
+                        _ComplaintTile(complaint: _complaints[i]),
                   ),
                 ),
     );
   }
+}
 
-  Widget _emptyState() => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.report_off, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            Text('No complaints yet',
-                style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-            const SizedBox(height: 8),
-            Text('Tap + to report an issue',
-                style: TextStyle(color: Colors.grey[400])),
-          ],
-        ),
+class _EmptyState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.citizen.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.report_gmailerrorred_rounded,
+                size: 48, color: AppTheme.citizen),
+          ),
+          AppTheme.gapMD,
+          Text('No complaints yet', style: AppTheme.heading3),
+          AppTheme.gapSM,
+          Text('Tap + Report to submit a new complaint',
+              style: AppTheme.caption),
+        ]),
       );
 }
 
-class _ComplaintCard extends StatelessWidget {
+class _ComplaintTile extends StatelessWidget {
   final ComplaintModel complaint;
-  final String? address;
-  const _ComplaintCard({required this.complaint, this.address});
+  const _ComplaintTile({required this.complaint});
 
   @override
   Widget build(BuildContext context) {
-    final locationText = address ??
-        'Lat: ${complaint.latitude.toStringAsFixed(4)}, Lng: ${complaint.longitude.toStringAsFixed(4)}';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(complaint.description,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 15)),
-                ),
-                const SizedBox(width: 8),
-                StatusChip(status: complaint.status),
-              ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTheme.spSM + 2),
+      padding: const EdgeInsets.all(AppTheme.spMD),
+      decoration: AppTheme.cardDecoration,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: Text(complaint.description,
+                  style: AppTheme.body.copyWith(fontWeight: FontWeight.w600)),
             ),
-            const SizedBox(height: 10),
-            _infoRow(Icons.location_on, locationText),
-            const SizedBox(height: 4),
-            _infoRow(Icons.calendar_today, complaint.createdAt),
+            const SizedBox(width: AppTheme.spSM),
+            StatusChip(status: complaint.status),
+          ]),
+          if (complaint.location.isNotEmpty) ...[
+            AppTheme.gapSM,
+            _row(Icons.location_on_rounded, complaint.location),
           ],
-        ),
+          if (complaint.createdAt.isNotEmpty) ...[
+            const SizedBox(height: AppTheme.spXS),
+            _row(Icons.calendar_today_rounded, complaint.createdAt),
+          ],
+        ],
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String text) => Row(
-        children: [
-          Icon(icon, size: 14, color: Colors.grey),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(text,
-                style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-          ),
-        ],
-      );
+  Widget _row(IconData icon, String text) => Row(children: [
+        Icon(icon, size: 13, color: AppTheme.textHint),
+        const SizedBox(width: 5),
+        Expanded(child: Text(text, style: AppTheme.caption)),
+      ]);
 }

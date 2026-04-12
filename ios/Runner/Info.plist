@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera is needed to scan QR codes and capture waste disposal photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is needed to attach waste disposal proof images.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Location is needed to tag your complaint with GPS coordinates.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Location is needed to tag your complaint with GPS coordinates.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

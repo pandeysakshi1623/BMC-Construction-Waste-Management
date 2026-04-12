@@ -1,8 +1,16 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String _base = 'http://10.24.41.1:8000';
+  /// Base URL for the backend.
+  /// - macOS desktop / Chrome → http://localhost:8000
+  /// - Android emulator       → http://10.0.2.2:8000
+  /// - Real device (same WiFi)→ http://192.168.1.7:8000
+  static const String _base = 'http://localhost:8000';
+
+  static const Duration _timeout = Duration(seconds: 10);
 
   /// Builds standard auth headers for all authenticated requests
   static Map<String, String> _authHeaders(String token) => {
@@ -26,14 +34,14 @@ class ApiService {
 
   // ALERTS
   static Future<List<Map<String, dynamic>>> getAlerts({
-    required String role, // 'contractor' or 'bmc'
+    required String role,
     String token = '',
   }) async {
     final endpoint = role == 'contractor' ? 'contractor' : 'bmc';
     final response = await http.get(
       Uri.parse('$_base/alerts/$endpoint'),
       headers: _authHeaders(token),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -50,7 +58,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$_base/bmc/dashboard'),
       headers: _authHeaders(token),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else {
@@ -63,7 +71,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$_base/bmc/qr-scan/$siteId'),
       headers: _authHeaders(token),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else {
@@ -80,7 +88,7 @@ class ApiService {
         'penalty_cost_rupees': amount,
         'reason': reason,
       }),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(_errorMessage(response, 'Failed to add penalty'));
     }
@@ -88,12 +96,11 @@ class ApiService {
 
   static Future<void> approveTruck(
       String pickupId, String status, {String token = ''}) async {
-    // status: 'Approved' or 'Rejected'
     final response = await http.post(
       Uri.parse('$_base/bmc/trucks/$pickupId/approve'),
       headers: _authHeaders(token),
       body: jsonEncode({'status': status}),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(_errorMessage(response, 'Failed to update truck status'));
     }
@@ -102,63 +109,39 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getBmcPickups({
     String token = '',
   }) async {
-    // TODO: Replace with backend API when available — GET /bmc/pickups
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      {
-        'id': 'p001',
-        'site_name': 'Downtown Tower A',
-        'location': 'Main St, Block 5',
-        'scheduled_date': '2024-06-10',
-        'status': 'Pending',
-        'driver_name': 'Ahmed Al-Rashid',
-        'driver_vehicle': 'Truck - ABC 1234',
-      },
-      {
-        'id': 'p002',
-        'site_name': 'Riverside Complex',
-        'location': 'River Rd, Block 2',
-        'scheduled_date': '2024-06-11',
-        'status': 'Completed',
-        'driver_name': 'Khalid Al-Otaibi',
-        'driver_vehicle': 'Truck - XYZ 5678',
-      },
-    ];
+    final response = await http.get(
+      Uri.parse('$_base/pickups/contractor'),
+      headers: _authHeaders(token),
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    }
+    throw Exception(_errorMessage(response, 'Failed to load pickups'));
   }
 
   static Future<List<Map<String, dynamic>>> getBmcComplaints({
     String token = '',
   }) async {
-    // TODO: Replace with backend API when available — GET /bmc/complaints
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      {
-        'id': 'c001',
-        'description': 'Illegal dumping near school',
-        'site_id': 'site_001',
-        'citizen_id': 'user_123',
-        'status': 'Under Review',
-        'created_at': '2024-06-01',
-      },
-      {
-        'id': 'c002',
-        'description': 'Construction debris blocking road',
-        'site_id': 'site_002',
-        'citizen_id': 'user_456',
-        'status': 'Resolved',
-        'created_at': '2024-05-28',
-      },
-    ];
+    final response = await http.get(
+      Uri.parse('$_base/citizen/queries/all'),
+      headers: _authHeaders(token),
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    }
+    // Fallback — BMC complaints endpoint may not exist yet
+    return [];
   }
 
   // CONTRACTOR
   static Future<Map<String, dynamic>> registerSite({
     required String name,
     required String location,
-    required String area, // kept as String for safe int parsing
+    required String area,
     String token = '',
   }) async {
-    // Safe parse — validate before sending
     final plotSize = int.tryParse(area.trim());
     if (plotSize == null) {
       throw Exception('Area must be a valid whole number');
@@ -170,12 +153,12 @@ class ApiService {
       body: jsonEncode({
         'site_name': name,
         'location': location,
-        'project_type': 'Construction', // default value
+        'project_type': 'Construction',
         'plot_size': plotSize,
       }),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
 
-    print('Register Site Response: ${response.body}'); // debug
+    print('Register Site Response: ${response.body}');
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       return jsonDecode(response.body) as Map<String, dynamic>;
@@ -190,7 +173,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$_base/sites/all'),
       headers: _authHeaders(token),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -207,7 +190,7 @@ class ApiService {
       Uri.parse('$_base/pickups/request'),
       headers: _authHeaders(token),
       body: jsonEncode({'site_id': siteId, 'scheduled_date': date}),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       return true;
@@ -216,50 +199,26 @@ class ApiService {
     }
   }
 
-  /// Returns pickups for contractor view — includes driver info per site
   static Future<List<Map<String, dynamic>>> getContractorPickups({
     String token = '',
   }) async {
-    // TODO: Replace with backend API when available — GET /pickups/contractor
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      {
-        'id': 'p001',
-        'site_id': 'site_001',
-        'site_name': 'Downtown Tower A',
-        'location': 'Main St, Block 5',
-        'scheduled_date': '2024-06-10',
-        'status': 'Accepted',
-        'qr_code': 'QR_SITE_001',
-        'waste_type': 'Construction Debris',
-        'driver_id': 'd01',
-        'driver_name': 'Ahmed Al-Rashid',
-        'driver_phone': '+966501234567',
-        'driver_vehicle': 'Truck - ABC 1234',
-      },
-      {
-        'id': 'p002',
-        'site_id': 'site_002',
-        'site_name': 'Riverside Complex',
-        'location': 'River Rd, Block 2',
-        'scheduled_date': '2024-06-11',
-        'status': 'Completed',
-        'qr_code': 'QR_SITE_002',
-        'waste_type': 'Mixed Waste',
-        'driver_id': 'd02',
-        'driver_name': 'Khalid Al-Otaibi',
-        'driver_phone': '+966509876543',
-        'driver_vehicle': 'Truck - XYZ 5678',
-      },
-    ];
+    final response = await http.get(
+      Uri.parse('$_base/pickups/contractor'),
+      headers: _authHeaders(token),
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    }
+    throw Exception(_errorMessage(response, 'Failed to load pickups'));
   }
 
   static Future<bool> uploadProof(
       String siteId, String imagePath, double quantity, {
     String token = '',
+    Uint8List? imageBytes,
+    String? imageName,
   }) async {
-    print('Uploading image: $imagePath'); // debug
-
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$_base/sites/upload-proof'),
@@ -267,13 +226,21 @@ class ApiService {
     request.headers['Authorization'] = 'Bearer $token';
     request.fields['site_id'] = siteId;
     request.fields['actual_waste'] = quantity.toString();
-    request.files.add(
-      await http.MultipartFile.fromPath('image', imagePath),
-    );
+
+    if (imageBytes != null) {
+      // Web path — use bytes directly
+      request.files.add(http.MultipartFile.fromBytes(
+        'image',
+        imageBytes,
+        filename: imageName ?? 'photo.jpg',
+      ));
+    } else {
+      // Mobile path — use file path
+      request.files.add(await http.MultipartFile.fromPath('image', imagePath));
+    }
 
     final streamed = await request.send();
     final responseBody = await streamed.stream.bytesToString();
-    print('Upload Response: $responseBody'); // debug
 
     if (streamed.statusCode == 200 || streamed.statusCode == 201) {
       return true;
@@ -315,7 +282,7 @@ class ApiService {
         'email': email,
         'company_name': companyName,
       }),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out. Check your network or server.'));
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(_errorMessage(response, 'Signup failed'));
     }
@@ -337,13 +304,13 @@ class ApiService {
         'name': name,
         'contact': contact,
       }),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out. Check your network or server.'));
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(_errorMessage(response, 'Signup failed'));
     }
   }
 
-  /// Driver signup — uses same endpoint as contractor
+  /// Driver signup — dedicated endpoint, no email/company required
   static Future<void> signupDriver({
     required String username,
     required String password,
@@ -351,18 +318,15 @@ class ApiService {
     required String contact,
   }) async {
     final response = await http.post(
-      Uri.parse('$_base/auth/signup'),
+      Uri.parse('$_base/auth/signup/driver'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'username': username,
         'password': password,
         'name': name,
         'contact': contact,
-        'address': '',
-        'email': '',
-        'company_name': '',
       }),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out. Check your network or server.'));
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(_errorMessage(response, 'Signup failed'));
     }
@@ -373,7 +337,7 @@ class ApiService {
       Uri.parse('$_base/auth/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'username': username, 'password': password}),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out. Check your network or server.'));
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else {
@@ -387,7 +351,7 @@ class ApiService {
       Uri.parse('$_base/citizen/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'username': username, 'password': password}),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out. Check your network or server.'));
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else {
@@ -401,7 +365,7 @@ class ApiService {
       Uri.parse('$_base/bmc/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'username': username, 'password': password}),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out. Check your network or server.'));
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else {
@@ -419,7 +383,7 @@ class ApiService {
       Uri.parse('$_base/citizen/query'),
       headers: _authHeaders(token),
       body: jsonEncode({'description': description, 'location': location}),
-    );
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
 
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(_errorMessage(response, 'Failed to submit complaint'));
@@ -429,37 +393,17 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getComplaints({
     String token = '',
   }) async {
-    // TODO: Replace with backend API when available — GET /citizen/queries
-    await Future.delayed(const Duration(seconds: 1));
-    return [
-      {
-        'id': 'c001',
-        'description': 'Illegal dumping near school',
-        'latitude': 24.7136,
-        'longitude': 46.6753,
-        'status': 'Under Review',
-        'created_at': '2024-06-01',
-        'image_url': '',
-      },
-      {
-        'id': 'c002',
-        'description': 'Construction debris blocking road',
-        'latitude': 24.7200,
-        'longitude': 46.6800,
-        'status': 'Resolved',
-        'created_at': '2024-05-28',
-        'image_url': '',
-      },
-      {
-        'id': 'c003',
-        'description': 'Waste pile near residential area',
-        'latitude': 24.7100,
-        'longitude': 46.6700,
-        'status': 'Pending',
-        'created_at': '2024-06-03',
-        'image_url': '',
-      },
-    ];
+    final response = await http.get(
+      Uri.parse('$_base/citizen/queries'),
+      headers: _authHeaders(token),
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    } else {
+      throw Exception(_errorMessage(response, 'Failed to load complaints'));
+    }
   }
 
   // DRIVER
@@ -490,38 +434,44 @@ class ApiService {
     ];
   }
 
-  static Future<bool> validateQrCode(String qrCode, {
-    String token = '',
-  }) async {
-    // TODO: Replace with real API call
-    // final response = await http.post(
-    //   Uri.parse('$baseUrl/driver/validate-qr'),
-    //   headers: _authHeaders(token),
-    //   body: jsonEncode({'qr_code': qrCode}),
-    // );
-    await Future.delayed(const Duration(milliseconds: 800));
-    return qrCode.startsWith('QR_SITE_');
+  static Future<bool> validateQrCode(String qrCode, {String token = ''}) async {
+    // QR codes are site IDs — validate by checking if site exists
+    try {
+      final response = await http.get(
+        Uri.parse('$_base/bmc/qr-scan/$qrCode'),
+        headers: _authHeaders(token),
+      ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<bool> uploadDisposalProof(
       String pickupId, String imagePath, {
     String token = '',
+    Uint8List? imageBytes,
+    String? imageName,
   }) async {
-    print('Uploading image: $imagePath'); // debug
-
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$_base/pickups/upload-proof'),
     );
     request.headers['Authorization'] = 'Bearer $token';
     request.fields['pickup_id'] = pickupId;
-    request.files.add(
-      await http.MultipartFile.fromPath('image', imagePath),
-    );
+
+    if (imageBytes != null) {
+      request.files.add(http.MultipartFile.fromBytes(
+        'image',
+        imageBytes,
+        filename: imageName ?? 'photo.jpg',
+      ));
+    } else {
+      request.files.add(await http.MultipartFile.fromPath('image', imagePath));
+    }
 
     final streamed = await request.send();
     final responseBody = await streamed.stream.bytesToString();
-    print('Upload Response: $responseBody'); // debug
 
     if (streamed.statusCode == 200 || streamed.statusCode == 201) {
       return true;

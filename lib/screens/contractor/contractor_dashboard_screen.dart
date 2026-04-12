@@ -4,13 +4,13 @@ import '../../models/pickup_model.dart';
 import '../../models/site_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../utils/app_theme.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/driver_info_card.dart';
 import '../../widgets/status_chip.dart';
 
 class ContractorDashboardScreen extends StatefulWidget {
   const ContractorDashboardScreen({super.key});
-
   @override
   State<ContractorDashboardScreen> createState() =>
       _ContractorDashboardScreenState();
@@ -23,207 +23,258 @@ class _ContractorDashboardScreenState
   bool _loading = true;
 
   @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
+  void initState() { super.initState(); _load(); }
 
-  Future<void> _loadData() async {
+  Future<void> _load() async {
     setState(() => _loading = true);
     try {
       final token = context.read<AuthProvider>().user?.token ?? '';
-
-      // Load both in parallel
       final results = await Future.wait([
         ApiService.getContractorSites(token: token),
         ApiService.getContractorPickups(token: token),
       ]);
-
       final sites = (results[0] as List<Map<String, dynamic>>)
-          .map((e) => SiteModel.fromJson(e))
-          .toList();
-
-      final pickupMap = <String, PickupModel>{};
+          .map(SiteModel.fromJson).toList();
+      final map = <String, PickupModel>{};
       for (final p in results[1] as List<Map<String, dynamic>>) {
         final pickup = PickupModel.fromJson(p);
-        pickupMap[pickup.siteId] = pickup;
+        map[pickup.siteId] = pickup;
       }
-
-      setState(() {
-        _sites = sites;
-        _pickupBySiteId = pickupMap;
-      });
+      setState(() { _sites = sites; _pickupBySiteId = map; });
     } catch (e) {
-      if (e.toString().contains('401') || e.toString().contains('Unauthorized')) {
+      if (e.toString().contains('401')) {
+        await context.read<AuthProvider>().handleUnauthorized();
         if (mounted) {
-          await context.read<AuthProvider>().handleUnauthorized();
           Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
         }
       } else {
-        _showSnack('Failed to load data', isError: true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to load sites'),
+            backgroundColor: AppTheme.error,
+          ));
+        }
       }
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
-  }
-
-  // keep _loadSites as alias so FAB still works
-  Future<void> _loadSites() => _loadData();
-
-  void _showSnack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red : Colors.green,
-    ));
   }
 
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Contractor Dashboard',
+      title: 'My Sites',
       extraActions: [
         IconButton(
-          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+          icon: const Icon(Icons.notifications_outlined),
           tooltip: 'Alerts',
-          onPressed: () =>
-              Navigator.pushNamed(context, '/contractor/alerts'),
+          onPressed: () => Navigator.pushNamed(context, '/contractor/alerts'),
         ),
       ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.pushNamed(context, '/contractor/register-site');
-          _loadSites();
+          _load();
         },
-        backgroundColor: Colors.blue,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New Site', style: TextStyle(color: Colors.white)),
+        backgroundColor: AppTheme.contractor,
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: const Text('New Site',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _sites.isEmpty
-              ? _emptyState()
+              ? _EmptyState(onAdd: () async {
+                  await Navigator.pushNamed(
+                      context, '/contractor/register-site');
+                  _load();
+                })
               : RefreshIndicator(
-                  onRefresh: _loadSites,
+                  onRefresh: _load,
                   child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(
+                        AppTheme.spMD, AppTheme.spMD,
+                        AppTheme.spMD, 100),
                     itemCount: _sites.length,
                     itemBuilder: (_, i) => _SiteCard(
                       site: _sites[i],
                       pickup: _pickupBySiteId[_sites[i].id],
-                      onRefresh: _loadSites,
                     ),
                   ),
                 ),
     );
   }
+}
 
-  Widget _emptyState() => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.construction, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            Text('No sites registered yet',
-                style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-            const SizedBox(height: 8),
-            Text('Tap + to register your first site',
-                style: TextStyle(color: Colors.grey[400])),
-          ],
-        ),
+class _EmptyState extends StatelessWidget {
+  final VoidCallback onAdd;
+  const _EmptyState({required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.contractor.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.construction_rounded,
+                size: 48, color: AppTheme.contractor),
+          ),
+          AppTheme.gapMD,
+          Text('No sites yet', style: AppTheme.heading3),
+          AppTheme.gapSM,
+          Text('Register your first construction site',
+              style: AppTheme.caption),
+          AppTheme.gapLG,
+          ElevatedButton.icon(
+            onPressed: onAdd,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.contractor,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Register Site'),
+          ),
+        ]),
       );
 }
 
 class _SiteCard extends StatelessWidget {
   final SiteModel site;
   final PickupModel? pickup;
-  final VoidCallback onRefresh;
-
-  const _SiteCard({required this.site, required this.onRefresh, this.pickup});
+  const _SiteCard({required this.site, this.pickup});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTheme.spMD),
+      decoration: AppTheme.cardDecoration,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.all(AppTheme.spMD),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(site.name,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(site.name, style: AppTheme.heading3),
+                      AppTheme.gapXS,
+                      Row(children: [
+                        const Icon(Icons.location_on_rounded,
+                            size: 13, color: AppTheme.textHint),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(site.location, style: AppTheme.caption,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ]),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: AppTheme.spSM),
                 StatusChip(status: site.pickupStatus),
               ],
             ),
-            const SizedBox(height: 6),
-            Row(children: [
-              const Icon(Icons.location_on, size: 14, color: Colors.grey),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(site.location,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-              ),
-            ]),
-            const Divider(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+          ),
+
+          // Stats row
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: AppTheme.spMD),
+            padding: const EdgeInsets.symmetric(
+                vertical: AppTheme.spSM + 2),
+            decoration: BoxDecoration(
+              color: AppTheme.bg,
+              borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _stat('Expected', '${site.expectedWaste}t'),
-                _stat('Actual', '${site.actualWaste}t'),
-                _stat('Area', '${site.area}m²'),
+                _stat('Expected', '${site.expectedWaste}t',
+                    Icons.inventory_2_outlined),
+                _divider(),
+                _stat('Actual', '${site.actualWaste}t',
+                    Icons.delete_outline_rounded),
+                _divider(),
+                _stat('Area', '${site.area}m²',
+                    Icons.square_foot_rounded),
               ],
             ),
-            const SizedBox(height: 12),
-            Row(children: [
-              _actionBtn(context, Icons.qr_code, 'QR',
-                  () => Navigator.pushNamed(context, '/contractor/qr-display',
+          ),
+
+          // Actions
+          Padding(
+            padding: const EdgeInsets.all(AppTheme.spMD),
+            child: Row(children: [
+              _actionBtn(context, Icons.qr_code_rounded, 'QR Code',
+                  AppTheme.contractor, () => Navigator.pushNamed(
+                      context, '/contractor/qr-display',
                       arguments: site)),
-              const SizedBox(width: 8),
-              _actionBtn(context, Icons.schedule, 'Schedule',
-                  () => Navigator.pushNamed(
+              const SizedBox(width: AppTheme.spSM),
+              _actionBtn(context, Icons.schedule_rounded, 'Schedule',
+                  AppTheme.info, () => Navigator.pushNamed(
                       context, '/contractor/schedule-pickup',
                       arguments: site)),
-              const SizedBox(width: 8),
-              _actionBtn(context, Icons.upload, 'Proof',
-                  () => Navigator.pushNamed(
+              const SizedBox(width: AppTheme.spSM),
+              _actionBtn(context, Icons.upload_rounded, 'Proof',
+                  AppTheme.success, () => Navigator.pushNamed(
                       context, '/contractor/upload-proof',
                       arguments: site)),
             ]),
-            if (pickup != null) DriverInfoCard(pickup: pickup!),
-          ],
-        ),
+          ),
+
+          if (pickup != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppTheme.spMD, 0, AppTheme.spMD, AppTheme.spMD),
+              child: DriverInfoCard(pickup: pickup!),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _stat(String label, String value) => Column(
+  Widget _stat(String label, String value, IconData icon) => Column(
         children: [
+          Icon(icon, size: 14, color: AppTheme.textSecondary),
+          const SizedBox(height: 3),
           Text(value,
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-          const SizedBox(height: 2),
-          Text(label,
-              style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              style: AppTheme.body.copyWith(fontWeight: FontWeight.w700)),
+          Text(label, style: AppTheme.caption),
         ],
       );
 
-  Widget _actionBtn(
-          BuildContext context, IconData icon, String label, VoidCallback onTap) =>
-      Expanded(
-        child: OutlinedButton.icon(
-          onPressed: onTap,
-          icon: Icon(icon, size: 15),
-          label: Text(label, style: const TextStyle(fontSize: 12)),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+  Widget _divider() => Container(
+      height: 32, width: 1, color: AppTheme.divider);
+
+  Widget _actionBtn(BuildContext context, IconData icon, String label,
+      Color color, VoidCallback onTap) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+            border: Border.all(color: color.withOpacity(0.2)),
           ),
+          child: Column(children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(height: 3),
+            Text(label,
+                style: AppTheme.caption.copyWith(
+                    color: color, fontWeight: FontWeight.w600)),
+          ]),
         ),
-      );
+      ),
+    );
+  }
 }

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from database import official_collection, penalty_collection, bmc_master_collection, citizen_collection, site_collection, pickup_collection
+from database import official_collection, penalty_collection, bmc_master_collection, citizen_collection, site_collection, pickup_collection, contractor_collection
 from models.bmc import BMCOfficialLogin, PenaltyRequest, TruckApprovalRequest
 from bson import ObjectId
 from utils.security import create_access_token, verify_password, get_password_hash
+from utils.notify import notify_penalty_issued
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/bmc", tags=["BMC Officials"])
@@ -13,7 +14,16 @@ router = APIRouter(prefix="/bmc", tags=["BMC Officials"])
 @router.post("/login")
 async def login(official: BMCOfficialLogin):
     user = await official_collection.find_one({"username": official.username})
-    if not user or not verify_password(official.password, user["password"]):
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    # Support both 'password' (plain, seeded) and 'hashed_password' fields
+    stored = user.get("hashed_password") or user.get("password", "")
+    # Try bcrypt verify first; fall back to plain-text comparison for seeded accounts
+    try:
+        valid = verify_password(official.password, stored)
+    except Exception:
+        valid = (official.password == stored)
+    if not valid:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     
     access_token = create_access_token(data={"sub": user["username"], "role": "bmc_official"})
@@ -66,36 +76,39 @@ async def issue_penalty(site_id: str, request: PenaltyRequest):
     }
     
     await penalty_collection.insert_one(new_penalty)
-    
-    # Update master DB record logic (increment active_penalties)
+
+    # Update master DB record
     await bmc_master_collection.update_one(
         {"site_id": site_id},
         {"$inc": {"active_penalties": 1}}
     )
-    
+
+    # Notify contractor by email
+    contractor = await contractor_collection.find_one({"contractor_id": str(contractor_id)})
+    if contractor and contractor.get("email"):
+        await notify_penalty_issued(
+            contractor_email=contractor["email"],
+            contractor_name=contractor.get("name", "Contractor"),
+            site_id=site_id,
+            amount=request.penalty_cost_rupees,
+            reason=request.reason or "",
+            penalty_id=new_penalty["penalty_id"],
+            contractor_id=str(contractor_id),
+        )
+
     return {"message": "Penalty issued successfully", "penalty_id": new_penalty["penalty_id"]}
 
 @router.get("/dashboard")
 async def bmc_dashboard():
-    """
-    Aggregated Analytical Dashboard for BMC Officials.
-    """
+    """Aggregated Analytical Dashboard for BMC Officials."""
     total_active_penalties = await penalty_collection.count_documents({"penalty_status": "Active"})
-    total_dead_penalties = await penalty_collection.count_documents({"penalty_status": "Dead"})
     total_sites = await site_collection.count_documents({})
-    
-    # Get pending truck approvals
-    pending_trucks = await pickup_collection.find({"assignment_status": "Pending Approval"}).to_list(100)
-    for t in pending_trucks:
-        t["_id"] = str(t["_id"])
-        
+    total_pickups = await pickup_collection.count_documents({})
+
     return {
-        "dashboard_stats": {
-            "total_sites": total_sites,
-            "active_penalties": total_active_penalties,
-            "resolved_penalties": total_dead_penalties
-        },
-        "pending_truck_approvals": pending_trucks
+        "total_sites": total_sites,
+        "total_pickups": total_pickups,
+        "total_penalties": total_active_penalties,
     }
 
 @router.post("/trucks/{pickup_id}/approve")

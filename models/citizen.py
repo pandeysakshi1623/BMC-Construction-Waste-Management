@@ -18,12 +18,13 @@ class Citizen(BaseModel):
     contact: Optional[str] = None
 
 class CitizenQueryCreate(BaseModel):
-    site_id: str
-    citizen_query: str
+    description: str
+    location: str
 
 class CitizenQuery(BaseModel):
     query_id: str
     citizen_id: str
-    site_id: str
-    contractor_id: str
-    citizen_query: str
+    description: str
+    location: str
+    status: Optional[str] = "Pending"
+    created_at: Optional[str] = None

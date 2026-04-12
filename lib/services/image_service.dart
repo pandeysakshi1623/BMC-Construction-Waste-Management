@@ -1,15 +1,26 @@
 import 'dart:async';
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ImageService {
   static final _picker = ImagePicker();
 
-  /// Shows a bottom sheet, waits for the user to pick an image,
-  /// and returns the File — or null if cancelled.
-  static Future<File?> pickImage(BuildContext context) async {
-    final completer = Completer<File?>();
+  /// Shows a bottom sheet and returns an [XFile] — works on web and mobile.
+  /// Returns null if the user cancels.
+  static Future<XFile?> pickImage(BuildContext context) async {
+    // On web there is no camera/gallery distinction in the OS picker,
+    // so skip the bottom sheet and open the file picker directly.
+    if (kIsWeb) {
+      final picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 75,
+      );
+      return picked;
+    }
+
+    // Mobile: show camera / gallery bottom sheet
+    final completer = Completer<XFile?>();
 
     await showModalBottomSheet(
       context: context,
@@ -42,12 +53,10 @@ class ImageService {
                 title: const Text('Take Photo'),
                 subtitle: const Text('Use your camera'),
                 onTap: () async {
-                  Navigator.pop(context); // close sheet first
+                  Navigator.pop(context);
                   final picked = await _picker.pickImage(
                       source: ImageSource.camera, imageQuality: 75);
-                  final file = picked != null ? File(picked.path) : null;
-                  print('Selected image: ${file?.path}');
-                  if (!completer.isCompleted) completer.complete(file);
+                  if (!completer.isCompleted) completer.complete(picked);
                 },
               ),
               ListTile(
@@ -58,12 +67,10 @@ class ImageService {
                 title: const Text('Choose from Gallery'),
                 subtitle: const Text('Pick an existing photo'),
                 onTap: () async {
-                  Navigator.pop(context); // close sheet first
+                  Navigator.pop(context);
                   final picked = await _picker.pickImage(
                       source: ImageSource.gallery, imageQuality: 75);
-                  final file = picked != null ? File(picked.path) : null;
-                  print('Selected image: ${file?.path}');
-                  if (!completer.isCompleted) completer.complete(file);
+                  if (!completer.isCompleted) completer.complete(picked);
                 },
               ),
               const SizedBox(height: 8),
@@ -72,12 +79,19 @@ class ImageService {
         ),
       ),
     ).then((_) {
-      // Sheet dismissed without selecting (back button / tap outside)
       if (!completer.isCompleted) completer.complete(null);
     });
 
-    final result = await completer.future;
-    print('Image state: $result');
-    return result;
+    return completer.future;
+  }
+
+  /// Renders the picked image correctly on both web and mobile.
+  static Widget previewWidget(XFile file, {BoxFit fit = BoxFit.cover}) {
+    if (kIsWeb) {
+      // On web, XFile.path is a blob URL — use Image.network
+      return Image.network(file.path, fit: fit);
+    }
+    // On mobile, use Image.asset via bytes for safety, or just network works too
+    return Image.network(file.path, fit: fit);
   }
 }

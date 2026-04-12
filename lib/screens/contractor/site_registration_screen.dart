@@ -1,57 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/site_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
-import '../../models/site_model.dart';
+import '../../utils/app_theme.dart';
+import '../../widgets/loading_button.dart';
 
 class SiteRegistrationScreen extends StatefulWidget {
   const SiteRegistrationScreen({super.key});
-
   @override
   State<SiteRegistrationScreen> createState() => _SiteRegistrationScreenState();
 }
 
 class _SiteRegistrationScreenState extends State<SiteRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _locationController = TextEditingController();
-  final _areaController = TextEditingController();
+  final _nameCtrl     = TextEditingController();
+  final _locationCtrl = TextEditingController();
+  final _areaCtrl     = TextEditingController();
   bool _loading = false;
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _locationController.dispose();
-    _areaController.dispose();
+    _nameCtrl.dispose(); _locationCtrl.dispose(); _areaCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-
     try {
       final token = context.read<AuthProvider>().user?.token ?? '';
       final data = await ApiService.registerSite(
-        name: _nameController.text.trim(),
-        location: _locationController.text.trim(),
-        area: _areaController.text.trim(),
+        name: _nameCtrl.text.trim(),
+        location: _locationCtrl.text.trim(),
+        area: _areaCtrl.text.trim(),
         token: token,
       );
-
       if (mounted) {
-        final site = SiteModel.fromJson(data);
-        Navigator.pushReplacementNamed(
-          context,
-          '/contractor/qr-display',
-          arguments: site,
-        );
+        Navigator.pushReplacementNamed(context, '/contractor/qr-display',
+            arguments: SiteModel.fromJson(data));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
         ));
       }
     } finally {
@@ -62,64 +55,77 @@ class _SiteRegistrationScreenState extends State<SiteRegistrationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('Register Site'),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppTheme.contractor,
         foregroundColor: Colors.white,
+        title: const Text('Register Site'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppTheme.spLG),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildField(
-                controller: _nameController,
-                label: 'Site Name',
-                icon: Icons.business,
-                validator: (v) => v!.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-              _buildField(
-                controller: _locationController,
-                label: 'Location / Address',
-                icon: Icons.location_on,
-                validator: (v) => v!.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-              _buildField(
-                controller: _areaController,
-                label: 'Area (m²)',
-                icon: Icons.square_foot,
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Required';
-                  if (int.tryParse(v.trim()) == null) {
-                    return 'Enter a whole number (e.g. 500)';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _loading ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+              // Header card
+              Container(
+                padding: const EdgeInsets.all(AppTheme.spMD),
+                decoration: BoxDecoration(
+                  color: AppTheme.contractor.withOpacity(0.07),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
                 ),
-                child: _loading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : const Text('Register & Get QR Code',
-                        style: TextStyle(fontSize: 16)),
+                child: Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.contractor.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.add_business_rounded,
+                        color: AppTheme.contractor, size: 22),
+                  ),
+                  const SizedBox(width: AppTheme.spMD),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('New Construction Site',
+                            style: AppTheme.heading3),
+                        AppTheme.gapXS,
+                        Text('Fill in the details to register and get a QR code',
+                            style: AppTheme.caption),
+                      ],
+                    ),
+                  ),
+                ]),
+              ),
+              AppTheme.gapLG,
+
+              _field(_nameCtrl, 'Site Name', 'e.g. Tower Block A',
+                  Icons.business_rounded),
+              AppTheme.gapMD,
+              _field(_locationCtrl, 'Location / Address',
+                  'e.g. Main St, Block 5', Icons.location_on_rounded),
+              AppTheme.gapMD,
+              _field(_areaCtrl, 'Plot Area (m²)', 'e.g. 500',
+                  Icons.square_foot_rounded,
+                  type: TextInputType.number,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    if (int.tryParse(v.trim()) == null) {
+                      return 'Enter a whole number';
+                    }
+                    return null;
+                  }),
+              AppTheme.gapXL,
+
+              LoadingButton(
+                isLoading: _loading,
+                label: 'Register & Generate QR',
+                color: AppTheme.contractor,
+                icon: Icons.qr_code_rounded,
+                onPressed: _submit,
               ),
             ],
           ),
@@ -128,24 +134,24 @@ class _SiteRegistrationScreenState extends State<SiteRegistrationScreen> {
     );
   }
 
-  Widget _buildField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
+  Widget _field(
+    TextEditingController ctrl,
+    String label,
+    String hint,
+    IconData icon, {
+    TextInputType type = TextInputType.text,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      validator: validator,
+      controller: ctrl,
+      keyboardType: type,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         prefixIcon: Icon(icon),
-        border: const OutlineInputBorder(),
-        filled: true,
-        fillColor: Colors.white,
       ),
+      validator: validator ??
+          (v) => v == null || v.trim().isEmpty ? 'Required' : null,
     );
   }
 }

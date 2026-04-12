@@ -3,16 +3,17 @@ import 'package:provider/provider.dart';
 import '../../models/site_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../utils/app_theme.dart';
+import '../../widgets/loading_button.dart';
 
 class PickupSchedulingScreen extends StatefulWidget {
   const PickupSchedulingScreen({super.key});
-
   @override
   State<PickupSchedulingScreen> createState() => _PickupSchedulingScreenState();
 }
 
 class _PickupSchedulingScreenState extends State<PickupSchedulingScreen> {
-  DateTime? _selectedDate;
+  DateTime? _date;
   bool _loading = false;
 
   Future<void> _pickDate() async {
@@ -21,30 +22,34 @@ class _PickupSchedulingScreenState extends State<PickupSchedulingScreen> {
       initialDate: DateTime.now().add(const Duration(days: 1)),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 60)),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: ColorScheme.light(primary: AppTheme.contractor),
+        ),
+        child: child!,
+      ),
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked != null) setState(() => _date = picked);
   }
 
   Future<void> _submit(SiteModel site) async {
-    if (_selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a date')),
-      );
+    if (_date == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please select a pickup date'),
+        backgroundColor: AppTheme.warning,
+      ));
       return;
     }
-
     setState(() => _loading = true);
     final dateStr =
-        '${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}';
-
+        '${_date!.year}-${_date!.month.toString().padLeft(2, '0')}-${_date!.day.toString().padLeft(2, '0')}';
     try {
       final token = context.read<AuthProvider>().user?.token ?? '';
       await ApiService.schedulePickup(site.id, dateStr, token: token);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Pickup scheduled for $dateStr'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppTheme.success,
         ));
         Navigator.pop(context);
       }
@@ -52,7 +57,7 @@ class _PickupSchedulingScreenState extends State<PickupSchedulingScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
         ));
       }
     } finally {
@@ -65,90 +70,103 @@ class _PickupSchedulingScreenState extends State<PickupSchedulingScreen> {
     final site = ModalRoute.of(context)!.settings.arguments as SiteModel;
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('Schedule Pickup'),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppTheme.contractor,
         foregroundColor: Colors.white,
+        title: const Text('Schedule Pickup'),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppTheme.spLG),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Card(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Site Details',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14,
-                            color: Colors.grey)),
-                    const SizedBox(height: 8),
-                    Text(site.name,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(site.location,
-                        style: TextStyle(color: Colors.grey[600])),
-                  ],
+            // Site card
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spMD),
+              decoration: AppTheme.cardDecoration,
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.contractor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.business_rounded,
+                      color: AppTheme.contractor, size: 20),
                 ),
-              ),
+                const SizedBox(width: AppTheme.spMD),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(site.name, style: AppTheme.heading3),
+                      AppTheme.gapXS,
+                      Text(site.location, style: AppTheme.caption),
+                    ],
+                  ),
+                ),
+              ]),
             ),
-            const SizedBox(height: 24),
-            const Text('Select Pickup Date',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 12),
+            AppTheme.gapLG,
+
+            Text('Select Pickup Date', style: AppTheme.heading3),
+            AppTheme.gapSM,
+            Text('Choose a date within the next 60 days',
+                style: AppTheme.caption),
+            AppTheme.gapMD,
+
+            // Date picker tile
             InkWell(
               onTap: _pickDate,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMD),
               child: Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppTheme.spMD),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.grey[400]!),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                  border: Border.all(
+                    color: _date != null
+                        ? AppTheme.contractor
+                        : AppTheme.divider,
+                    width: _date != null ? 1.5 : 1,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today, color: Colors.orange),
-                    const SizedBox(width: 12),
-                    Text(
-                      _selectedDate == null
-                          ? 'Tap to select date'
-                          : '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}',
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: _selectedDate == null
-                            ? Colors.grey[500]
-                            : Colors.black,
+                child: Row(children: [
+                  Icon(Icons.calendar_month_rounded,
+                      color: _date != null
+                          ? AppTheme.contractor
+                          : AppTheme.textHint,
+                      size: 22),
+                  const SizedBox(width: AppTheme.spMD),
+                  Expanded(
+                    child: Text(
+                      _date == null
+                          ? 'Tap to select a date'
+                          : '${_date!.day} / ${_date!.month} / ${_date!.year}',
+                      style: AppTheme.body.copyWith(
+                        color: _date == null
+                            ? AppTheme.textHint
+                            : AppTheme.textPrimary,
+                        fontWeight: _date != null
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      color: AppTheme.textHint, size: 20),
+                ]),
               ),
             ),
+
             const Spacer(),
-            ElevatedButton(
-              onPressed: _loading ? null : () => _submit(site),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
-              ),
-              child: _loading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Text('Confirm Schedule',
-                      style: TextStyle(fontSize: 16)),
+            LoadingButton(
+              isLoading: _loading,
+              label: 'Confirm Schedule',
+              color: AppTheme.contractor,
+              icon: Icons.check_rounded,
+              onPressed: () => _submit(site),
             ),
           ],
         ),

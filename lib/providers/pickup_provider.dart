@@ -7,13 +7,15 @@ class PickupProvider extends ChangeNotifier {
   List<PickupModel> _pickups = [];
   bool _loading = false;
   String? _error;
-  bool _firstLoad = true; // guard — notify only on first load
+  bool _firstLoad = true;
+  String _token = '';
 
   List<PickupModel> get pickups => _pickups;
   bool get loading => _loading;
   String? get error => _error;
 
-  /// Counts by status — useful for dashboard badges
+  void setToken(String token) { _token = token; }
+
   int countByStatus(PickupStatus s) =>
       _pickups.where((p) => p.status == s).length;
 
@@ -23,16 +25,12 @@ class PickupProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _pickups = await PickupService.getAssignedPickups();
+      _pickups = await PickupService.getAssignedPickups(token: _token);
 
-      // Notify driver of pending pickups on first load only
       if (_firstLoad) {
         _firstLoad = false;
-        final pending = _pickups
-            .where((p) => p.status == PickupStatus.pending)
-            .toList();
-        for (final pickup in pending) {
-          NotificationService.pickupAssigned(pickup.siteName);
+        for (final p in _pickups.where((p) => p.status == PickupStatus.pending)) {
+          NotificationService.pickupAssigned(p.siteName);
         }
       }
     } catch (e) {
@@ -43,7 +41,6 @@ class PickupProvider extends ChangeNotifier {
     }
   }
 
-  /// Updates a single pickup's status locally + calls API
   Future<bool> updateStatus(
     String pickupId,
     PickupStatus newStatus, {
@@ -52,16 +49,15 @@ class PickupProvider extends ChangeNotifier {
     final index = _pickups.indexWhere((p) => p.id == pickupId);
     if (index == -1) return false;
 
-    // Optimistic update
     final old = _pickups[index];
     _pickups[index] = old.copyWith(status: newStatus, notes: notes);
     notifyListeners();
 
     try {
       final ok = await PickupService.updatePickupStatus(
-          pickupId, newStatus.value, notes: notes);
+          pickupId, newStatus.value,
+          notes: notes, token: _token);
       if (!ok) {
-        // Rollback on failure
         _pickups[index] = old;
         notifyListeners();
       }

@@ -5,8 +5,8 @@ class Contractor(BaseModel):
     name: str
     contact: str
     address: str
-    email: EmailStr
-    company_name: str
+    email: Optional[str] = None
+    company_name: Optional[str] = None
     contractor_id: Optional[str] = None
     username: str
     hashed_password: str
@@ -15,8 +15,14 @@ class ContractorCreate(BaseModel):
     name: str
     contact: str
     address: str
-    email: EmailStr
+    email: EmailStr          # required for contractors
     company_name: str
+    username: str
+    password: str
+
+class DriverCreate(BaseModel):
+    name: str
+    contact: str
     username: str
     password: str
 

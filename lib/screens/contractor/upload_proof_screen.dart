@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/site_model.dart';
 import '../../providers/auth_provider.dart';
@@ -15,7 +15,7 @@ class UploadProofScreen extends StatefulWidget {
 }
 
 class _UploadProofScreenState extends State<UploadProofScreen> {
-  File? _image;
+  XFile? _image;
   final _quantityController = TextEditingController();
   bool _submitting = false;
 
@@ -27,7 +27,6 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
 
   Future<void> _pickImage() async {
     final file = await ImageService.pickImage(context);
-    print('Image state: $file');
     if (file != null) setState(() => _image = file);
   }
 
@@ -43,9 +42,15 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
     setState(() => _submitting = true);
     try {
       final token = context.read<AuthProvider>().user?.token ?? '';
+      final bytes = await _image!.readAsBytes();
       final ok = await ApiService.uploadProof(
-          site.id, _image!.path, double.parse(_quantityController.text),
-          token: token);
+        site.id,
+        _image!.path,
+        double.parse(_quantityController.text),
+        token: token,
+        imageBytes: bytes,
+        imageName: _image!.name,
+      );
       if (mounted) {
         _snack(ok ? 'Proof uploaded!' : 'Upload failed', isError: !ok);
         if (ok) Navigator.pop(context);
@@ -119,7 +124,7 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
                     : Stack(fit: StackFit.expand, children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.file(_image!, fit: BoxFit.cover),
+                          child: ImageService.previewWidget(_image!),
                         ),
                         Positioned(
                           top: 8, right: 8,

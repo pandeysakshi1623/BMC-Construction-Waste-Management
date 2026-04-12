@@ -1,99 +1,81 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
+import '../../utils/app_theme.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
-
   @override
   State<SignupScreen> createState() => _SignupScreenState();
 }
 
 class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _usernameCtrl  = TextEditingController();
+  final _passwordCtrl  = TextEditingController();
+  final _nameCtrl      = TextEditingController();
+  final _contactCtrl   = TextEditingController();
+  final _emailCtrl     = TextEditingController();
+  final _companyCtrl   = TextEditingController();
+  final _addressCtrl   = TextEditingController();
 
-  // Common fields
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _contactController = TextEditingController();
-
-  // Contractor-only fields
-  final _emailController = TextEditingController();
-  final _companyController = TextEditingController();
-  final _addressController = TextEditingController();
-
-  String _selectedRole = 'contractor';
-  bool _obscurePassword = true;
+  String _role = 'contractor';
+  bool _obscure = true;
   bool _loading = false;
 
   @override
   void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    _nameController.dispose();
-    _contactController.dispose();
-    _emailController.dispose();
-    _companyController.dispose();
-    _addressController.dispose();
+    for (final c in [_usernameCtrl, _passwordCtrl, _nameCtrl, _contactCtrl,
+                     _emailCtrl, _companyCtrl, _addressCtrl]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  bool get _isContractor => _selectedRole == 'contractor';
-  bool get _isCitizen => _selectedRole == 'citizen';
-  bool get _isDriver => _selectedRole == 'driver';
-  bool get _isBmc => _selectedRole == 'bmc';
+  bool get _isContractor => _role == 'contractor';
+  bool get _isBmc        => _role == 'bmc';
 
-  Future<void> _handleSignup() async {
-    // BMC cannot self-register
-    if (_isBmc) return;
-
-    if (!_formKey.currentState!.validate()) return;
-
+  Future<void> _submit() async {
+    if (_isBmc || !_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
       if (_isContractor) {
         await ApiService.signupContractor(
-          username: _usernameController.text.trim(),
-          password: _passwordController.text.trim(),
-          name: _nameController.text.trim(),
-          contact: _contactController.text.trim(),
-          address: _addressController.text.trim(),
-          email: _emailController.text.trim(),
-          companyName: _companyController.text.trim(),
+          username: _usernameCtrl.text.trim(),
+          password: _passwordCtrl.text.trim(),
+          name: _nameCtrl.text.trim(),
+          contact: _contactCtrl.text.trim(),
+          address: _addressCtrl.text.trim(),
+          email: _emailCtrl.text.trim(),
+          companyName: _companyCtrl.text.trim(),
         );
-      } else if (_isCitizen) {
+      } else if (_role == 'citizen') {
         await ApiService.signupCitizen(
-          username: _usernameController.text.trim(),
-          password: _passwordController.text.trim(),
-          name: _nameController.text.trim(),
-          contact: _contactController.text.trim(),
+          username: _usernameCtrl.text.trim(),
+          password: _passwordCtrl.text.trim(),
+          name: _nameCtrl.text.trim(),
+          contact: _contactCtrl.text.trim(),
         );
-      } else if (_isDriver) {
+      } else {
         await ApiService.signupDriver(
-          username: _usernameController.text.trim(),
-          password: _passwordController.text.trim(),
-          name: _nameController.text.trim(),
-          contact: _contactController.text.trim(),
+          username: _usernameCtrl.text.trim(),
+          password: _passwordCtrl.text.trim(),
+          name: _nameCtrl.text.trim(),
+          contact: _contactCtrl.text.trim(),
         );
       }
-
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account created! Please login.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Account created! Please login.'),
+          backgroundColor: AppTheme.success,
+        ));
         Navigator.pushReplacementNamed(context, '/login');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceFirst('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppTheme.error,
+        ));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -102,91 +84,49 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final roleColor = AppTheme.roleColor(_role);
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('Create Account'),
-        backgroundColor: Colors.orange,
+        backgroundColor: roleColor,
         foregroundColor: Colors.white,
+        title: const Text('Create Account'),
+        elevation: 0,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppTheme.spLG),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(Icons.construction, size: 56, color: Colors.orange),
-                const SizedBox(height: 12),
-                const Text(
-                  'Smart Waste Monitor',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Register a new account',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 28),
-
-                // Role dropdown — shown first so fields update accordingly
+                // Role selector
+                _label('Select your role'),
+                AppTheme.gapSM,
                 DropdownButtonFormField<String>(
-                  value: _selectedRole,
+                  value: _role,
                   decoration: const InputDecoration(
-                    labelText: 'Role',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                    border: OutlineInputBorder(),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
+                      prefixIcon: Icon(Icons.badge_outlined)),
                   items: const [
-                    DropdownMenuItem(
-                        value: 'contractor', child: Text('Contractor')),
-                    DropdownMenuItem(
-                        value: 'citizen', child: Text('Citizen')),
-                    DropdownMenuItem(
-                        value: 'driver', child: Text('Driver')),
-                    DropdownMenuItem(
-                        value: 'bmc', child: Text('BMC Official')),
+                    DropdownMenuItem(value: 'contractor', child: Text('Contractor')),
+                    DropdownMenuItem(value: 'citizen',    child: Text('Citizen')),
+                    DropdownMenuItem(value: 'driver',     child: Text('Driver')),
+                    DropdownMenuItem(value: 'bmc',        child: Text('BMC Official')),
                   ],
-                  onChanged: (val) {
-                    if (val != null) setState(() => _selectedRole = val);
-                  },
+                  onChanged: (v) { if (v != null) setState(() => _role = v); },
                 ),
-                const SizedBox(height: 14),
+                AppTheme.gapMD,
 
-                // BMC info message — no self-registration
                 if (_isBmc) ...[
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A237E).withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: const Color(0xFF1A237E).withOpacity(0.3)),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.info_outline,
-                            color: Color(0xFF1A237E), size: 22),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'BMC Official accounts are pre-created by the admin.\nPlease contact your administrator for access.',
-                            style: TextStyle(
-                                color: Color(0xFF1A237E),
-                                fontSize: 13,
-                                height: 1.4),
-                          ),
-                        ),
-                      ],
-                    ),
+                  _InfoBanner(
+                    icon: Icons.info_outline_rounded,
+                    color: AppTheme.bmc,
+                    message:
+                        'BMC Official accounts are pre-created by the administrator.\nContact your admin for access credentials.',
                   ),
-                  const SizedBox(height: 16),
+                  AppTheme.gapMD,
                   OutlinedButton(
                     onPressed: () =>
                         Navigator.pushReplacementNamed(context, '/login'),
@@ -194,112 +134,87 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                 ],
 
-                // Form fields — hidden for BMC
                 if (!_isBmc) ...[
-                // Username — all roles
-                _field(
-                  controller: _usernameController,
-                  label: 'Username',
-                  icon: Icons.person_outline,
-                ),
-                const SizedBox(height: 14),
+                  _label('Username'),
+                  AppTheme.gapSM,
+                  _field(_usernameCtrl, 'Enter username',
+                      Icons.person_outline_rounded),
+                  AppTheme.gapMD,
 
-                // Password — all roles
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    border: const OutlineInputBorder(),
-                    filled: true,
-                    fillColor: Colors.white,
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility),
-                      onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword),
+                  _label('Password'),
+                  AppTheme.gapSM,
+                  TextFormField(
+                    controller: _passwordCtrl,
+                    obscureText: _obscure,
+                    decoration: InputDecoration(
+                      hintText: 'Min 6 characters',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscure
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
+                        onPressed: () =>
+                            setState(() => _obscure = !_obscure),
+                      ),
                     ),
+                    validator: (v) =>
+                        v == null || v.length < 6 ? 'Min 6 characters' : null,
                   ),
-                  validator: (v) =>
-                      v == null || v.length < 6 ? 'Min 6 characters' : null,
-                ),
-                const SizedBox(height: 14),
+                  AppTheme.gapMD,
 
-                // Full name — all roles
-                _field(
-                  controller: _nameController,
-                  label: 'Full Name',
-                  icon: Icons.badge_outlined,
-                ),
-                const SizedBox(height: 14),
+                  _label('Full Name'),
+                  AppTheme.gapSM,
+                  _field(_nameCtrl, 'Enter your full name',
+                      Icons.badge_outlined),
+                  AppTheme.gapMD,
 
-                // Contact — all roles
-                _field(
-                  controller: _contactController,
-                  label: 'Contact Number',
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                ),
+                  _label('Contact Number'),
+                  AppTheme.gapSM,
+                  _field(_contactCtrl, 'Phone or email',
+                      Icons.phone_outlined,
+                      type: TextInputType.phone),
+                  AppTheme.gapMD,
 
-                // Contractor-only fields
-                if (_isContractor) ...[
-                  const SizedBox(height: 14),
-                  _field(
-                    controller: _emailController,
-                    label: 'Email',
-                    icon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (v) => v == null || !v.contains('@')
-                        ? 'Enter a valid email'
-                        : null,
-                  ),
-                  const SizedBox(height: 14),
-                  _field(
-                    controller: _companyController,
-                    label: 'Company Name',
-                    icon: Icons.business_outlined,
-                  ),
-                  const SizedBox(height: 14),
-                  _field(
-                    controller: _addressController,
-                    label: 'Address',
-                    icon: Icons.location_on_outlined,
+                  if (_isContractor) ...[
+                    _label('Email Address'),
+                    AppTheme.gapSM,
+                    _field(_emailCtrl, 'company@example.com',
+                        Icons.email_outlined,
+                        type: TextInputType.emailAddress,
+                        validator: (v) => v == null || !v.contains('@')
+                            ? 'Enter a valid email'
+                            : null),
+                    AppTheme.gapMD,
+
+                    _label('Company Name'),
+                    AppTheme.gapSM,
+                    _field(_companyCtrl, 'Your company name',
+                        Icons.business_outlined),
+                    AppTheme.gapMD,
+
+                    _label('Address'),
+                    AppTheme.gapSM,
+                    _field(_addressCtrl, 'Office / site address',
+                        Icons.location_on_outlined),
+                    AppTheme.gapMD,
+                  ],
+
+                  AppTheme.gapSM,
+                  LoadingButton(
+                    isLoading: _loading,
+                    label: 'Create Account',
+                    color: roleColor,
+                    icon: Icons.person_add_rounded,
+                    onPressed: _submit,
                   ),
                 ],
 
-                const SizedBox(height: 32),
-
-                ElevatedButton(
-                  onPressed: _loading ? null : _handleSignup,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: _loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Text('Sign Up',
-                          style: TextStyle(fontSize: 16)),
-                ),
-                ], // end !_isBmc
-
-                const SizedBox(height: 16),
+                AppTheme.gapMD,
                 TextButton(
                   onPressed: () =>
                       Navigator.pushReplacementNamed(context, '/login'),
-                  child: const Text(
-                    'Already have an account? Login',
-                    style: TextStyle(color: Colors.orange),
-                  ),
+                  child: Text('Already have an account? Login',
+                      style: TextStyle(color: roleColor)),
                 ),
               ],
             ),
@@ -309,25 +224,106 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  Widget _field({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
+  Widget _label(String text) => Text(text,
+      style: AppTheme.caption.copyWith(fontWeight: FontWeight.w600));
+
+  Widget _field(
+    TextEditingController ctrl,
+    String hint,
+    IconData icon, {
+    TextInputType type = TextInputType.text,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
+      controller: ctrl,
+      keyboardType: type,
       decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        border: const OutlineInputBorder(),
-        filled: true,
-        fillColor: Colors.white,
-      ),
+          hintText: hint, prefixIcon: Icon(icon)),
       validator: validator ??
           (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+    );
+  }
+}
+
+// ignore: must_be_immutable
+class LoadingButton extends StatelessWidget {
+  final bool isLoading;
+  final String label;
+  final VoidCallback? onPressed;
+  final Color? color;
+  final IconData? icon;
+
+  const LoadingButton({
+    super.key,
+    required this.isLoading,
+    required this.label,
+    required this.onPressed,
+    this.color,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = color ?? Theme.of(context).colorScheme.primary;
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: isLoading ? null : onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: bg,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: bg.withOpacity(0.6),
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 15),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMD)),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                height: 20, width: 20,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2))
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 18),
+                    const SizedBox(width: AppTheme.spSM),
+                  ],
+                  Text(label,
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w600)),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _InfoBanner extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String message;
+  const _InfoBanner(
+      {required this.icon, required this.color, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spMD),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+        border: Border.all(color: color.withOpacity(0.25)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: AppTheme.spSM + 2),
+        Expanded(
+          child: Text(message,
+              style: AppTheme.bodySmall.copyWith(color: color, height: 1.5)),
+        ),
+      ]),
     );
   }
 }

@@ -1,239 +1,217 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/image_service.dart';
 import '../../services/location_service.dart';
+import '../../utils/app_theme.dart';
 import '../../widgets/loading_button.dart';
 
 class ReportComplaintScreen extends StatefulWidget {
   const ReportComplaintScreen({super.key});
-
   @override
   State<ReportComplaintScreen> createState() => _ReportComplaintScreenState();
 }
 
 class _ReportComplaintScreenState extends State<ReportComplaintScreen> {
-  final _descController = TextEditingController();
-  File? _image;
+  final _descCtrl = TextEditingController();
+  XFile? _image;
   double? _lat, _lng;
   String? _address;
-  bool _fetchingLocation = false;
+  bool _fetchingLoc = false;
   bool _submitting = false;
 
   @override
-  void dispose() {
-    _descController.dispose();
-    super.dispose();
-  }
+  void dispose() { _descCtrl.dispose(); super.dispose(); }
 
   Future<void> _pickImage() async {
-    final file = await ImageService.pickImage(context);
-    if (file != null) setState(() => _image = file);
+    final f = await ImageService.pickImage(context);
+    if (f != null) setState(() => _image = f);
   }
 
   Future<void> _fetchLocation() async {
-    setState(() => _fetchingLocation = true);
-    final result = await LocationService.getCurrentLocation();
-    if (result.success) {
-      final address = await LocationService.reverseGeocode(
-          result.latitude!, result.longitude!);
-      setState(() {
-        _lat = result.latitude;
-        _lng = result.longitude;
-        _address = address;
-      });
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(result.error!),
-          backgroundColor: Colors.red,
-        ));
-      }
+    setState(() => _fetchingLoc = true);
+    final r = await LocationService.getCurrentLocation();
+    if (r.success) {
+      final addr = await LocationService.reverseGeocode(r.latitude!, r.longitude!);
+      setState(() { _lat = r.latitude; _lng = r.longitude; _address = addr; });
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(r.error!), backgroundColor: AppTheme.error));
     }
-    setState(() => _fetchingLocation = false);
+    setState(() => _fetchingLoc = false);
   }
 
   Future<void> _submit() async {
-    if (_descController.text.trim().isEmpty) {
-      _snack('Please enter a description', isError: true); return;
+    if (_descCtrl.text.trim().isEmpty) {
+      _snack('Please enter a description', err: true); return;
     }
-    if (_image == null) {
-      _snack('Please attach a photo', isError: true); return;
-    }
-    if (_lat == null) {
-      _snack('Please fetch your GPS location', isError: true); return;
-    }
-
-    // Use resolved address if available, fallback to lat/lng string
-    final locationStr = _address ?? LocationService.format(_lat!, _lng!);
+    if (_image == null) { _snack('Please attach a photo', err: true); return; }
+    if (_lat == null) { _snack('Please fetch your GPS location', err: true); return; }
 
     setState(() => _submitting = true);
     try {
       final token = context.read<AuthProvider>().user?.token ?? '';
       await ApiService.submitComplaint(
-        description: _descController.text.trim(),
-        location: locationStr,
+        description: _descCtrl.text.trim(),
+        location: _address ?? LocationService.format(_lat!, _lng!),
         token: token,
       );
-      if (mounted) {
-        _snack('Complaint submitted successfully');
-        Navigator.pop(context);
-      }
+      if (mounted) { _snack('Complaint submitted!'); Navigator.pop(context); }
     } catch (e) {
-      if (mounted) {
-        _snack(e.toString().replaceFirst('Exception: ', ''), isError: true);
-      }
+      if (mounted) _snack(e.toString().replaceFirst('Exception: ', ''), err: true);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  void _snack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red : Colors.green,
-    ));
-  }
+  void _snack(String msg, {bool err = false}) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: err ? AppTheme.error : AppTheme.success,
+      ));
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('Report Complaint'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppTheme.citizen,
         foregroundColor: Colors.white,
+        title: const Text('Report Complaint'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppTheme.spLG),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Image picker
+            // Photo picker
             GestureDetector(
               onTap: _pickImage,
               child: Container(
-                height: 190,
+                height: 180,
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(12),
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                  border: Border.all(
+                    color: _image != null
+                        ? AppTheme.citizen
+                        : AppTheme.divider,
+                    width: _image != null ? 1.5 : 1,
+                  ),
                 ),
                 child: _image == null
                     ? Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.add_a_photo,
-                              size: 48, color: Colors.grey[400]),
-                          const SizedBox(height: 8),
+                          Icon(Icons.add_a_photo_rounded,
+                              size: 40, color: AppTheme.textHint),
+                          AppTheme.gapSM,
                           Text('Tap to add photo',
-                              style: TextStyle(color: Colors.grey[500])),
-                          const SizedBox(height: 4),
+                              style: AppTheme.bodySmall),
+                          AppTheme.gapXS,
                           Text('Camera or Gallery',
-                              style: TextStyle(
-                                  color: Colors.grey[400], fontSize: 12)),
+                              style: AppTheme.caption),
                         ],
                       )
-                    : Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.file(_image!, fit: BoxFit.cover),
-                          ),
-                          Positioned(
-                            top: 8, right: 8,
-                            child: GestureDetector(
-                              onTap: _pickImage,
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Icon(Icons.edit,
-                                    color: Colors.white, size: 16),
+                    : Stack(fit: StackFit.expand, children: [
+                        ClipRRect(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMD),
+                          child: ImageService.previewWidget(_image!),
+                        ),
+                        Positioned(
+                          top: 8, right: 8,
+                          child: GestureDetector(
+                            onTap: _pickImage,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(
+                                    AppTheme.radiusFull),
                               ),
+                              child: const Icon(Icons.edit_rounded,
+                                  color: Colors.white, size: 15),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ]),
               ),
             ),
-            const SizedBox(height: 16),
+            AppTheme.gapMD,
 
             // Description
             TextFormField(
-              controller: _descController,
+              controller: _descCtrl,
               maxLines: 3,
               decoration: const InputDecoration(
                 labelText: 'Describe the issue',
+                hintText: 'What did you observe?',
                 alignLabelWithHint: true,
                 prefixIcon: Padding(
                   padding: EdgeInsets.only(bottom: 40),
                   child: Icon(Icons.description_outlined),
                 ),
-                border: OutlineInputBorder(),
-                filled: true,
-                fillColor: Colors.white,
               ),
             ),
-            const SizedBox(height: 16),
+            AppTheme.gapMD,
 
             // GPS row
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppTheme.spMD, vertical: AppTheme.spSM + 2),
               decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                border: Border.all(
+                  color: _lat != null ? AppTheme.citizen : AppTheme.divider,
+                  width: _lat != null ? 1.5 : 1,
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.location_on,
-                      color: _lat != null ? Colors.green : Colors.grey),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _fetchingLocation
-                        ? const Text('Fetching location...',
-                            style: TextStyle(color: Colors.grey))
-                        : Text(
-                            _lat != null
-                                ? (_address ?? LocationService.format(_lat!, _lng!))
-                                : 'Location not fetched',
-                            style: TextStyle(
-                              color: _lat != null
-                                  ? Colors.black87
-                                  : Colors.grey[500],
-                              fontSize: 13,
-                            ),
+              child: Row(children: [
+                Icon(Icons.location_on_rounded,
+                    color: _lat != null ? AppTheme.citizen : AppTheme.textHint,
+                    size: 20),
+                const SizedBox(width: AppTheme.spSM + 2),
+                Expanded(
+                  child: _fetchingLoc
+                      ? Text('Fetching location…', style: AppTheme.caption)
+                      : Text(
+                          _lat != null
+                              ? (_address ??
+                                  LocationService.format(_lat!, _lng!))
+                              : 'Location not fetched',
+                          style: AppTheme.bodySmall.copyWith(
+                            color: _lat != null
+                                ? AppTheme.textPrimary
+                                : AppTheme.textHint,
                           ),
+                        ),
+                ),
+                if (_fetchingLoc)
+                  const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                else
+                  TextButton(
+                    onPressed: _fetchLocation,
+                    style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.citizen,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(60, 32)),
+                    child: Text(_lat != null ? 'Refresh' : 'Fetch GPS'),
                   ),
-                  if (_fetchingLocation)
-                    const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                  else
-                    TextButton(
-                      onPressed: _fetchLocation,
-                      child: Text(
-                        _lat != null ? 'Refresh' : 'Fetch GPS',
-                        style: const TextStyle(color: Colors.green),
-                      ),
-                    ),
-                ],
-              ),
+              ]),
             ),
-            const SizedBox(height: 32),
+            AppTheme.gapXL,
 
             LoadingButton(
               isLoading: _submitting,
               label: 'Submit Complaint',
-              color: Colors.green,
-              icon: Icons.send,
+              color: AppTheme.citizen,
+              icon: Icons.send_rounded,
               onPressed: _submit,
             ),
           ],

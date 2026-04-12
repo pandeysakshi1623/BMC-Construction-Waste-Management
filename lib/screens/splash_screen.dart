@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/role_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -17,33 +18,24 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _navigate() async {
-    // Wait for auth provider to restore session from prefs
     final auth = context.read<AuthProvider>();
-
-    // Poll until initialized (usually instant)
     while (!auth.initialized) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
-
-    // Small delay so splash is visible
-    await Future.delayed(const Duration(milliseconds: 800));
-
     if (!mounted) return;
 
     if (auth.isLoggedIn) {
-      switch (auth.user!.role) {
+      // Sync RoleProvider so the badge shows the correct role immediately
+      context.read<RoleProvider>().syncFromAuthRole(auth.role);
+      switch (auth.role) {
         case 'contractor':
-          Navigator.pushReplacementNamed(context, '/contractor/dashboard');
-          break;
-        case 'citizen':
-          Navigator.pushReplacementNamed(context, '/citizen/complaints');
-          break;
+          Navigator.pushReplacementNamed(context, '/contractor/dashboard'); break;
         case 'driver':
-          Navigator.pushReplacementNamed(context, '/driver/pickups');
-          break;
+          Navigator.pushReplacementNamed(context, '/driver/pickups'); break;
+        case 'citizen':
+          Navigator.pushReplacementNamed(context, '/citizen/complaints'); break;
         case 'bmc':
-          Navigator.pushReplacementNamed(context, '/bmc/dashboard');
-          break;
+          Navigator.pushReplacementNamed(context, '/bmc/dashboard'); break;
         default:
           Navigator.pushReplacementNamed(context, '/login');
       }
@@ -55,30 +47,37 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.orange,
+      backgroundColor: const Color(0xFF1A237E),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.construction, size: 80, color: Colors.white),
-            const SizedBox(height: 16),
-            const Text(
-              'Smart Waste Monitor',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                shape: BoxShape.circle,
               ),
+              child: const Icon(Icons.delete_sweep_rounded,
+                  size: 72, color: Colors.white),
             ),
+            const SizedBox(height: 28),
+            const Text('Smart Waste Monitor',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5)),
             const SizedBox(height: 8),
-            Text(
-              'Construction Waste Management',
-              style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14),
-            ),
-            const SizedBox(height: 48),
-            const CircularProgressIndicator(
-              color: Colors.white,
-              strokeWidth: 2,
+            Text('BMC Construction Waste Management',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.75), fontSize: 13)),
+            const SizedBox(height: 56),
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                  color: Colors.white, strokeWidth: 2.5),
             ),
           ],
         ),

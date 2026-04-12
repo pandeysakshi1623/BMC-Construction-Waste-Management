@@ -1,31 +1,33 @@
 class ComplaintModel {
   final String id;
   final String description;
-  final double latitude;
-  final double longitude;
+  final String location;
   final String status;
   final String createdAt;
-  final String imageUrl;
+  // lat/lng optional — only present in legacy dummy data
+  final double latitude;
+  final double longitude;
 
   ComplaintModel({
     required this.id,
     required this.description,
-    required this.latitude,
-    required this.longitude,
+    required this.location,
     required this.status,
     required this.createdAt,
-    required this.imageUrl,
+    this.latitude = 0.0,
+    this.longitude = 0.0,
   });
 
   factory ComplaintModel.fromJson(Map<String, dynamic> json) {
     return ComplaintModel(
-      id: json['id'] ?? '',
+      // backend returns 'query_id', fallback to 'id'
+      id: json['query_id'] ?? json['id'] ?? '',
       description: json['description'] ?? '',
-      latitude: (json['latitude'] ?? 0).toDouble(),
-      longitude: (json['longitude'] ?? 0).toDouble(),
+      location: json['location'] ?? '',
       status: json['status'] ?? 'Pending',
       createdAt: json['created_at'] ?? '',
-      imageUrl: json['image_url'] ?? '',
+      latitude: (json['latitude'] ?? 0).toDouble(),
+      longitude: (json['longitude'] ?? 0).toDouble(),
     );
   }
 }

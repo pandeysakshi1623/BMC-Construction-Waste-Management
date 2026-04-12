@@ -3,10 +3,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from routers import auth, sites, pickups, bmc, citizen, alerts
 from utils.scheduler import generate_penalty_alerts
+from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 import asyncio
 import os
 
-app = FastAPI(title="BMC Construction Waste Management App", version="1.0.0")
+load_dotenv()  # Load .env variables before anything else
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    asyncio.create_task(generate_penalty_alerts())
+    yield
+    # Shutdown
+    pass
+
+app = FastAPI(title="BMC Construction Waste Management App", version="1.0.0", lifespan=lifespan)
 
 # CORS Setup
 app.add_middleware(
@@ -27,11 +39,6 @@ app.include_router(pickups.router)
 app.include_router(bmc.router)
 app.include_router(citizen.router)
 app.include_router(alerts.router)
-
-@app.on_event("startup")
-async def startup_event():
-    # Start the 24h background alert job
-    asyncio.create_task(generate_penalty_alerts())
 
 @app.get("/")
 def read_root():

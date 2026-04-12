@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../utils/app_theme.dart';
 
 class AlertsScreen extends StatefulWidget {
-  /// Pass 'contractor' or 'bmc' to fetch the correct endpoint
   final String role;
-
   const AlertsScreen({super.key, this.role = 'contractor'});
-
   @override
   State<AlertsScreen> createState() => _AlertsScreenState();
 }
@@ -19,12 +17,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
   String? _error;
 
   @override
-  void initState() {
-    super.initState();
-    _loadAlerts();
-  }
+  void initState() { super.initState(); _load(); }
 
-  Future<void> _loadAlerts() async {
+  Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
       final token = context.read<AuthProvider>().user?.token ?? '';
@@ -37,155 +32,143 @@ class _AlertsScreenState extends State<AlertsScreen> {
     }
   }
 
-  /// Formats ISO timestamp to readable string e.g. "12 Apr 2026, 10:00"
-  String _formatTime(String? raw) {
+  String _fmt(String? raw) {
     if (raw == null || raw.isEmpty) return '';
     try {
       final dt = DateTime.parse(raw).toLocal();
-      final months = ['Jan','Feb','Mar','Apr','May','Jun',
-                      'Jul','Aug','Sep','Oct','Nov','Dec'];
-      return '${dt.day} ${months[dt.month - 1]} ${dt.year}, '
+      const m = ['Jan','Feb','Mar','Apr','May','Jun',
+                  'Jul','Aug','Sep','Oct','Nov','Dec'];
+      return '${dt.day} ${m[dt.month-1]} ${dt.year}  '
              '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
-    } catch (_) {
-      return raw;
-    }
+    } catch (_) { return raw; }
   }
 
   @override
   Widget build(BuildContext context) {
+    final color = widget.role == 'bmc'
+        ? AppTheme.bmc
+        : AppTheme.contractor;
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('Alerts'),
-        backgroundColor: Colors.orange,
+        backgroundColor: color,
         foregroundColor: Colors.white,
+        title: const Text('Alerts'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadAlerts,
-            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _load,
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _errorView()
+              ? _ErrorState(message: _error!, onRetry: _load)
               : _alerts.isEmpty
-                  ? _emptyView()
+                  ? _EmptyState()
                   : RefreshIndicator(
-                      onRefresh: _loadAlerts,
+                      onRefresh: _load,
                       child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(AppTheme.spMD),
                         itemCount: _alerts.length,
-                        itemBuilder: (_, i) => _AlertCard(
-                          alert: _alerts[i],
-                          formatTime: _formatTime,
-                        ),
+                        itemBuilder: (_, i) =>
+                            _AlertTile(alert: _alerts[i], fmt: _fmt),
                       ),
                     ),
     );
   }
-
-  Widget _errorView() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadAlerts,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-
-  Widget _emptyView() => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.notifications_none, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            Text('No alerts at the moment',
-                style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-          ],
-        ),
-      );
 }
 
-class _AlertCard extends StatelessWidget {
+class _AlertTile extends StatelessWidget {
   final Map<String, dynamic> alert;
-  final String Function(String?) formatTime;
-
-  const _AlertCard({required this.alert, required this.formatTime});
+  final String Function(String?) fmt;
+  const _AlertTile({required this.alert, required this.fmt});
 
   @override
   Widget build(BuildContext context) {
-    final message = alert['message'] as String? ?? 'No message';
-    final siteId = alert['site_id'] as String?;
-    final timestamp = formatTime(alert['timestamp'] as String?);
+    final msg = alert['message'] as String? ?? '';
+    final siteId = alert['site_id'] as String? ?? '';
+    final ts = fmt(alert['timestamp'] as String?);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.warning_amber_rounded,
-                  color: Colors.orange, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(message,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 14)),
-                  if (siteId != null && siteId.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(children: [
-                      const Icon(Icons.construction,
-                          size: 12, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text('Site: $siteId',
-                          style: TextStyle(
-                              color: Colors.grey[600], fontSize: 12)),
-                    ]),
-                  ],
-                  if (timestamp.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(children: [
-                      const Icon(Icons.access_time,
-                          size: 12, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(timestamp,
-                          style: TextStyle(
-                              color: Colors.grey[500], fontSize: 12)),
-                    ]),
-                  ],
-                ],
-              ),
-            ),
-          ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTheme.spSM + 2),
+      padding: const EdgeInsets.all(AppTheme.spMD),
+      decoration: AppTheme.cardDecoration,
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          padding: const EdgeInsets.all(9),
+          decoration: BoxDecoration(
+            color: AppTheme.warning.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+          ),
+          child: const Icon(Icons.notifications_rounded,
+              color: AppTheme.warning, size: 18),
         ),
-      ),
+        const SizedBox(width: AppTheme.spMD),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(msg, style: AppTheme.body.copyWith(fontWeight: FontWeight.w500)),
+              if (siteId.isNotEmpty) ...[
+                AppTheme.gapXS,
+                Row(children: [
+                  const Icon(Icons.construction_rounded,
+                      size: 11, color: AppTheme.textHint),
+                  const SizedBox(width: 4),
+                  Text('Site: $siteId', style: AppTheme.caption),
+                ]),
+              ],
+              if (ts.isNotEmpty) ...[
+                AppTheme.gapXS,
+                Row(children: [
+                  const Icon(Icons.access_time_rounded,
+                      size: 11, color: AppTheme.textHint),
+                  const SizedBox(width: 4),
+                  Text(ts, style: AppTheme.caption),
+                ]),
+              ],
+            ],
+          ),
+        ),
+      ]),
     );
   }
+}
+
+class _EmptyState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.notifications_none_rounded,
+              size: 56, color: Colors.grey[300]),
+          AppTheme.gapMD,
+          Text('No alerts yet', style: AppTheme.bodySmall),
+        ]),
+      );
+}
+
+class _ErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorState({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppTheme.spLG),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.error_outline_rounded,
+                size: 48, color: AppTheme.error),
+            AppTheme.gapMD,
+            Text(message,
+                textAlign: TextAlign.center,
+                style: AppTheme.bodySmall.copyWith(color: AppTheme.error)),
+            AppTheme.gapMD,
+            ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+          ]),
+        ),
+      );
 }

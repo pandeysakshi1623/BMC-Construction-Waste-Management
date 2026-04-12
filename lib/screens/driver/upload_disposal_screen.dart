@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/pickup_model.dart';
 import '../../providers/auth_provider.dart';
@@ -15,12 +15,11 @@ class UploadDisposalScreen extends StatefulWidget {
 }
 
 class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
-  File? _image;
+  XFile? _image;
   bool _submitting = false;
 
   Future<void> _pickImage() async {
     final file = await ImageService.pickImage(context);
-    print('Image state: $file');
     if (file != null) setState(() => _image = file);
   }
 
@@ -36,8 +35,14 @@ class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
     setState(() => _submitting = true);
     try {
       final token = context.read<AuthProvider>().user?.token ?? '';
+      final bytes = await _image!.readAsBytes();
       final ok = await ApiService.uploadDisposalProof(
-          pickup.id, _image!.path, token: token);
+        pickup.id,
+        _image!.path,
+        token: token,
+        imageBytes: bytes,
+        imageName: _image!.name,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(ok ? 'Proof uploaded!' : 'Upload failed'),
@@ -124,7 +129,7 @@ class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
                     : Stack(fit: StackFit.expand, children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.file(_image!, fit: BoxFit.cover),
+                          child: ImageService.previewWidget(_image!),
                         ),
                         Positioned(
                           top: 8, right: 8,

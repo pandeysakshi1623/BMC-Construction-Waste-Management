@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/pickup_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/pickup_provider.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/app_scaffold.dart';
@@ -22,7 +23,10 @@ class _PickupsScreenState extends State<PickupsScreen>
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PickupProvider>().loadPickups();
+      final token = context.read<AuthProvider>().user?.token ?? '';
+      final provider = context.read<PickupProvider>();
+      provider.setToken(token);
+      provider.loadPickups();
     });
   }
 

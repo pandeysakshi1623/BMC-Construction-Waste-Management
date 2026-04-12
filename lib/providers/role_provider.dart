@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-enum AppRole { contractor, citizen, driver }
+enum AppRole { contractor, citizen, driver, bmc }
 
 extension AppRoleExt on AppRole {
   String get name {
@@ -9,6 +8,7 @@ extension AppRoleExt on AppRole {
       case AppRole.contractor: return 'contractor';
       case AppRole.citizen:    return 'citizen';
       case AppRole.driver:     return 'driver';
+      case AppRole.bmc:        return 'bmc';
     }
   }
 
@@ -17,6 +17,7 @@ extension AppRoleExt on AppRole {
       case AppRole.contractor: return 'Contractor';
       case AppRole.citizen:    return 'Citizen';
       case AppRole.driver:     return 'Driver';
+      case AppRole.bmc:        return 'BMC Official';
     }
   }
 
@@ -25,14 +26,16 @@ extension AppRoleExt on AppRole {
       case AppRole.contractor: return Icons.engineering;
       case AppRole.citizen:    return Icons.person;
       case AppRole.driver:     return Icons.local_shipping;
+      case AppRole.bmc:        return Icons.account_balance;
     }
   }
 
   Color get color {
     switch (this) {
-      case AppRole.contractor: return Colors.blue;
-      case AppRole.citizen:    return Colors.green;
-      case AppRole.driver:     return Colors.deepOrange;
+      case AppRole.contractor: return const Color(0xFF1565C0);
+      case AppRole.citizen:    return const Color(0xFF2E7D32);
+      case AppRole.driver:     return const Color(0xFFE65100);
+      case AppRole.bmc:        return const Color(0xFF1A237E);
     }
   }
 
@@ -41,44 +44,33 @@ extension AppRoleExt on AppRole {
       case AppRole.contractor: return '/contractor/dashboard';
       case AppRole.citizen:    return '/citizen/complaints';
       case AppRole.driver:     return '/driver/pickups';
+      case AppRole.bmc:        return '/bmc/dashboard';
     }
   }
 
   static AppRole fromString(String value) {
-    switch (value) {
-      case 'citizen': return AppRole.citizen;
-      case 'driver':  return AppRole.driver;
-      default:        return AppRole.contractor;
+    switch (value.toLowerCase()) {
+      case 'citizen':    return AppRole.citizen;
+      case 'driver':     return AppRole.driver;
+      case 'bmc':        return AppRole.bmc;
+      default:           return AppRole.contractor;
     }
   }
 }
 
+/// Derives the current role directly from AuthProvider's stored role string.
+/// This is the single source of truth — no separate SharedPreferences key.
 class RoleProvider extends ChangeNotifier {
   AppRole _currentRole = AppRole.contractor;
-  bool _initialized = false;
 
   AppRole get currentRole => _currentRole;
-  bool get initialized => _initialized;
 
-  RoleProvider() {
-    _loadRole();
-  }
-
-  Future<void> _loadRole() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('current_role');
-    if (saved != null) {
-      _currentRole = AppRoleExt.fromString(saved);
+  /// Call this after login or session restore to sync the role badge.
+  void syncFromAuthRole(String roleString) {
+    final parsed = AppRoleExt.fromString(roleString);
+    if (parsed != _currentRole) {
+      _currentRole = parsed;
+      notifyListeners();
     }
-    _initialized = true;
-    notifyListeners();
-  }
-
-  /// Switch role without logging out — persists the choice
-  Future<void> switchRole(AppRole role) async {
-    _currentRole = role;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('current_role', role.name);
-    notifyListeners();
   }
 }

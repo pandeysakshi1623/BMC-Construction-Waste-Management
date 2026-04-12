@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
-from database import site_collection
+from database import site_collection, contractor_collection
 from models.site import SiteCreate, Site
 from utils.deps import get_current_user
 from utils.qr_generator import generate_qr_file
+from utils.notify import notify_site_registered
 import uuid
 import os
 
@@ -16,12 +17,14 @@ async def register_site(
     site_data: SiteCreate,
     current_user: dict = Depends(get_current_user),
 ):
-    site_dict = site_data.dict()
+    site_dict = site_data.model_dump()
 
     unique_site_id = f"SITE_{str(uuid.uuid4())[:8].upper()}"
     site_dict["site_id"] = unique_site_id
+    site_dict["id"] = unique_site_id
     site_dict["contractor_id"] = current_user["contractor_id"]
     site_dict["status"] = "Active"
+    site_dict["pickup_status"] = "Pending"
 
     qr_data_string = (
         f"SITE_ID:{unique_site_id}"
@@ -29,10 +32,26 @@ async def register_site(
         f"|NAME:{site_dict['site_name']}"
     )
     filename = f"{unique_site_id}_qr.png"
-    site_dict["qr_code_url"] = generate_qr_file(qr_data_string, filename)
+    qr_url = generate_qr_file(qr_data_string, filename)
+    site_dict["qr_code_url"] = qr_url
+    site_dict["qr_code"] = unique_site_id  # short ID used for scanning
 
     new_site = await site_collection.insert_one(site_dict)
     created_site = await site_collection.find_one({"_id": new_site.inserted_id})
+    created_site["_id"] = str(created_site["_id"])
+
+    # Notify contractor by email
+    contractor = await contractor_collection.find_one(
+        {"contractor_id": current_user["contractor_id"]}
+    )
+    if contractor and contractor.get("email"):
+        await notify_site_registered(
+            contractor_email=contractor["email"],
+            contractor_name=contractor.get("name", "Contractor"),
+            site_name=site_dict["site_name"],
+            site_id=unique_site_id,
+            contractor_id=current_user["contractor_id"],
+        )
 
     return Site(**created_site)
 
@@ -47,7 +66,14 @@ async def get_all_sites(current_user: dict = Depends(get_current_user)):
     cursor = site_collection.find({"contractor_id": contractor_id, "status": "Active"})
     sites = []
     async for site in cursor:
+        site["id"] = site.get("site_id", str(site["_id"]))
         site["_id"] = str(site["_id"])
+        # Normalize field names for Flutter SiteModel
+        site.setdefault("qr_code", site.get("qr_code_url", ""))
+        site.setdefault("pickup_status", site.get("status", "Pending"))
+        site.setdefault("waste_estimated", site.get("expected_waste", 0))
+        site.setdefault("waste_actual", site.get("actual_waste", 0))
+        site.setdefault("area", site.get("plot_size", 0))
         sites.append(site)
     return sites
 
