@@ -1,0 +1,20 @@
+# Environments
+venv/
+env/
+ENV/
+.env
+
+# Python caching
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# User generated files
+uploads/
+data_source/
+openapi.json
