@@ -19,7 +19,6 @@ import 'screens/contractor/pickup_scheduling_screen.dart';
 import 'screens/contractor/upload_proof_screen.dart';
 // Citizen
 import 'screens/citizen/complaints_screen.dart';
-import 'screens/citizen/report_complaint_screen.dart';
 import 'screens/citizen/awareness_screen.dart';
 // Driver
 import 'screens/driver/pickups_screen.dart';
@@ -124,7 +123,6 @@ class MyApp extends StatelessWidget {
     '/contractor/upload-proof':    (_) => const UploadProofScreen(),
     // Citizen
     '/citizen/complaints':         (_) => const ComplaintsScreen(),
-    '/citizen/report':             (_) => const ReportComplaintScreen(),
     '/citizen/awareness':          (_) => const AwarenessScreen(),
     // Driver
     '/driver/pickups':             (_) => const PickupsScreen(),

@@ -8,7 +8,11 @@ class ApiService {
   /// - macOS desktop / Chrome → http://localhost:8000
   /// - Android emulator       → http://10.0.2.2:8000
   /// - Real device (same WiFi)→ http://192.168.1.7:8000
-  static const String _base = 'http://localhost:8000';
+  // static const String _base = 'http://192.168.171.18:8000';
+  static const String _base = 'http://127.0.0.1:8000';
+
+  /// Public base URL — used by screens to build full image URLs
+  static String get base => _base;
 
   static const Duration _timeout = Duration(seconds: 10);
 
@@ -71,6 +75,18 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$_base/bmc/qr-scan/$siteId'),
       headers: _authHeaders(token),
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception(_errorMessage(response, 'Site not found'));
+    }
+  }
+
+  /// Public QR lookup — no auth required. Used by Citizen + BMC scanners.
+  static Future<Map<String, dynamic>> getSiteByQrPublic(String siteId) async {
+    final response = await http.get(
+      Uri.parse('$_base/sites/by-qr/$siteId'),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
@@ -213,39 +229,65 @@ class ApiService {
     throw Exception(_errorMessage(response, 'Failed to load pickups'));
   }
 
-  static Future<bool> uploadProof(
+  static Future<String?> uploadProof(
       String siteId, String imagePath, double quantity, {
     String token = '',
     Uint8List? imageBytes,
     String? imageName,
+    bool driverVerified = false,
   }) async {
+    if (siteId.isEmpty) throw Exception('Site ID is required');
+    if (imageBytes == null) throw Exception('Image is required');
+
+    print('SITE ID: $siteId');
+    print('IMAGE PATH: $imagePath');
+    print('ACTUAL WASTE: $quantity');
+    print('DRIVER VERIFIED: $driverVerified');
+
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$_base/sites/upload-proof'),
     );
     request.headers['Authorization'] = 'Bearer $token';
     request.fields['site_id'] = siteId;
-    request.fields['actual_waste'] = quantity.toString();
+    request.fields['actual_waste'] = quantity.toStringAsFixed(2);
+    request.fields['driver_verified'] = driverVerified.toString();
 
-    if (imageBytes != null) {
-      // Web path — use bytes directly
-      request.files.add(http.MultipartFile.fromBytes(
-        'image',
-        imageBytes,
-        filename: imageName ?? 'photo.jpg',
-      ));
-    } else {
-      // Mobile path — use file path
-      request.files.add(await http.MultipartFile.fromPath('image', imagePath));
-    }
+    request.files.add(http.MultipartFile.fromBytes(
+      'image',
+      imageBytes,
+      filename: imageName ?? 'photo.jpg',
+    ));
+
+    print('Sending fields: ${request.fields}');
+    print('Sending file: ${imageName ?? 'photo.jpg'}');
 
     final streamed = await request.send();
     final responseBody = await streamed.stream.bytesToString();
+    print('Upload Response: $responseBody');
 
     if (streamed.statusCode == 200 || streamed.statusCode == 201) {
-      return true;
+      final decoded = jsonDecode(responseBody);
+      return decoded['image_url'] as String?;
     } else {
       throw Exception(_errorMessageFromString(responseBody, 'Upload failed'));
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getProofHistory(
+      String siteId, {String token = ''}) async {
+    final response = await http.get(
+      Uri.parse('$_base/sites/proof-history/$siteId'),
+      headers: _authHeaders(token),
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+
+    print('Proof history response: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    } else {
+      throw Exception(_errorMessage(response, 'Failed to load proof history'));
     }
   }
 
@@ -378,12 +420,19 @@ class ApiService {
     required String description,
     required String location,
     String token = '',
+    String siteId = '',
   }) async {
     final response = await http.post(
       Uri.parse('$_base/citizen/query'),
       headers: _authHeaders(token),
-      body: jsonEncode({'description': description, 'location': location}),
-    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+      body: jsonEncode({
+        'description': description,
+        'location': location,
+        if (siteId.isNotEmpty) 'site_id': siteId,
+      }),
+    ).timeout(_timeout,
+        onTimeout: () =>
+            throw const SocketException('Connection timed out.'));
 
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(_errorMessage(response, 'Failed to submit complaint'));
@@ -453,6 +502,12 @@ class ApiService {
     Uint8List? imageBytes,
     String? imageName,
   }) async {
+    if (pickupId.isEmpty) throw Exception('Pickup ID is required');
+    if (imageBytes == null) throw Exception('Image is required');
+
+    print('PICKUP ID: $pickupId');
+    print('IMAGE PATH: $imagePath');
+
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$_base/pickups/upload-proof'),
@@ -460,18 +515,19 @@ class ApiService {
     request.headers['Authorization'] = 'Bearer $token';
     request.fields['pickup_id'] = pickupId;
 
-    if (imageBytes != null) {
-      request.files.add(http.MultipartFile.fromBytes(
-        'image',
-        imageBytes,
-        filename: imageName ?? 'photo.jpg',
-      ));
-    } else {
-      request.files.add(await http.MultipartFile.fromPath('image', imagePath));
-    }
+    // Use fromBytes for BOTH web and mobile
+    request.files.add(http.MultipartFile.fromBytes(
+      'image',
+      imageBytes,
+      filename: imageName ?? 'photo.jpg',
+    ));
+
+    print('Sending fields: ${request.fields}');
+    print('Sending file: ${imageName ?? 'photo.jpg'}');
 
     final streamed = await request.send();
     final responseBody = await streamed.stream.bytesToString();
+    print('Upload Response: $responseBody');
 
     if (streamed.statusCode == 200 || streamed.statusCode == 201) {
       return true;

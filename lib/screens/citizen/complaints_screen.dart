@@ -7,6 +7,7 @@ import '../../services/notification_service.dart';
 import '../../utils/app_theme.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/status_chip.dart';
+import 'citizen_qr_scanner_screen.dart';
 
 class ComplaintsScreen extends StatefulWidget {
   const ComplaintsScreen({super.key});
@@ -54,6 +55,15 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
       title: 'My Complaints',
       extraActions: [
         IconButton(
+          icon: const Icon(Icons.qr_code_scanner),
+          tooltip: 'Scan Site QR',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => const CitizenQrScannerScreen()),
+          ),
+        ),
+        IconButton(
           icon: const Icon(Icons.eco_rounded),
           tooltip: 'Waste Awareness',
           onPressed: () => Navigator.pushNamed(context, '/citizen/awareness'),
@@ -61,12 +71,17 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
       ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          await Navigator.pushNamed(context, '/citizen/report');
-          _load();
+          // QR scan is mandatory entry point — open scanner, not complaint screen
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => const CitizenQrScannerScreen()),
+          );
+          _load(); // refresh list after returning
         },
         backgroundColor: AppTheme.citizen,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text('Report',
+        icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
+        label: const Text('Scan & Report',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
       body: _loading

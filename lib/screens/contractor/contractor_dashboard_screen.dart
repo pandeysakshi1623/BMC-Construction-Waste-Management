@@ -8,6 +8,7 @@ import '../../utils/app_theme.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/driver_info_card.dart';
 import '../../widgets/status_chip.dart';
+import 'proof_history_screen.dart';
 
 class ContractorDashboardScreen extends StatefulWidget {
   const ContractorDashboardScreen({super.key});
@@ -175,6 +176,33 @@ class _SiteCard extends StatelessWidget {
                               maxLines: 1, overflow: TextOverflow.ellipsis),
                         ),
                       ]),
+                      if (site.id.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: Colors.blue.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.tag,
+                                  size: 11, color: Colors.blue),
+                              const SizedBox(width: 3),
+                              Text(site.id,
+                                  style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.blue,
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -226,6 +254,13 @@ class _SiteCard extends StatelessWidget {
                   AppTheme.success, () => Navigator.pushNamed(
                       context, '/contractor/upload-proof',
                       arguments: site)),
+              const SizedBox(width: AppTheme.spSM),
+              _actionBtn(context, Icons.history_rounded, 'History',
+                  Colors.purple, () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              ProofHistoryScreen(site: site)))),
             ]),
           ),
 
