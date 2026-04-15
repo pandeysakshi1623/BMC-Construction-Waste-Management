@@ -1,0 +1,37 @@
+.dashboard {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Header */
+.dashboard-header {
+  margin-bottom: 36px;
+}
+
+.dashboard-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.dashboard-subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+/* Section label */
+.section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin-bottom: 16px;
+}
+
+/* Cards grid */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}

@@ -1,0 +1,32 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f6fb;
+  color: #1e293b;
+  line-height: 1.5;
+}
+
+/* Shared page title — used across all pages */
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 28px;
+}
+
+/* Loading / error states */
+.state-msg {
+  padding: 40px 0;
+  color: #64748b;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.state-msg.error {
+  color: #dc2626;
+}
