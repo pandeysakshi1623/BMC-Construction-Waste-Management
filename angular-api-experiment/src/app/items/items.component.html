@@ -1,0 +1,14 @@
+<div>
+  <h2>Latest 10 Posts</h2>
+  <div *ngIf="posts.length === 0; else postsList">
+    <p>Loading posts...</p>
+  </div>
+  <ng-template #postsList>
+    <ul class="posts-list">
+      <li *ngFor="let post of posts; trackBy: trackById" class="post-item">
+        <h3>{{ post.title }}</h3>
+        <p>{{ post.body }}</p>
+      </li>
+    </ul>
+  </ng-template>
+</div>
