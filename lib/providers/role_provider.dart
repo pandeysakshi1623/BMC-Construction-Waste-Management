@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum AppRole { contractor, citizen, driver }
+enum AppRole { contractor, citizen, driver, official }
 
 extension AppRoleExt on AppRole {
   String get name {
@@ -9,6 +9,7 @@ extension AppRoleExt on AppRole {
       case AppRole.contractor: return 'contractor';
       case AppRole.citizen:    return 'citizen';
       case AppRole.driver:     return 'driver';
+      case AppRole.official:   return 'official';
     }
   }
 
@@ -17,6 +18,7 @@ extension AppRoleExt on AppRole {
       case AppRole.contractor: return 'Contractor';
       case AppRole.citizen:    return 'Citizen';
       case AppRole.driver:     return 'Driver';
+      case AppRole.official:   return 'Official';
     }
   }
 
@@ -25,6 +27,7 @@ extension AppRoleExt on AppRole {
       case AppRole.contractor: return Icons.engineering;
       case AppRole.citizen:    return Icons.person;
       case AppRole.driver:     return Icons.local_shipping;
+      case AppRole.official:   return Icons.admin_panel_settings;
     }
   }
 
@@ -33,6 +36,7 @@ extension AppRoleExt on AppRole {
       case AppRole.contractor: return Colors.blue;
       case AppRole.citizen:    return Colors.green;
       case AppRole.driver:     return Colors.deepOrange;
+      case AppRole.official:   return Colors.purple;
     }
   }
 
@@ -41,6 +45,7 @@ extension AppRoleExt on AppRole {
       case AppRole.contractor: return '/contractor/dashboard';
       case AppRole.citizen:    return '/citizen/complaints';
       case AppRole.driver:     return '/driver/pickups';
+      case AppRole.official:   return '/officials/dashboard';
     }
   }
 
@@ -48,6 +53,7 @@ extension AppRoleExt on AppRole {
     switch (value) {
       case 'citizen': return AppRole.citizen;
       case 'driver':  return AppRole.driver;
+      case 'official':return AppRole.official;
       default:        return AppRole.contractor;
     }
   }

@@ -20,6 +20,7 @@ dependencies:
   share_plus: ^10.1.4
   path_provider: ^2.1.4
   geocoding: ^3.0.0
+  fl_chart: ^0.68.0
 
 dev_dependencies:
   flutter_test:

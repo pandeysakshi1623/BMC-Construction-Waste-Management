@@ -22,6 +22,8 @@ import 'screens/citizen/awareness_screen.dart';
 import 'screens/driver/pickups_screen.dart';
 import 'screens/driver/qr_scanner_screen.dart';
 import 'screens/driver/upload_disposal_screen.dart';
+// Officials / Admin
+import 'screens/dashboard/analytics_dashboard_screen.dart';
 
 void main() {
   runApp(
@@ -81,6 +83,8 @@ class MyApp extends StatelessWidget {
         '/driver/pickups':             (_) => const PickupsScreen(),
         '/driver/qr-scanner':          (_) => const QrScannerScreen(),
         '/driver/upload-disposal':     (_) => const UploadDisposalScreen(),
+        // Officials
+        '/officials/dashboard':        (_) => const AnalyticsDashboardScreen(),
       },
     );
   }
