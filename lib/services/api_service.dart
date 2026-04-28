@@ -12,7 +12,7 @@ class ApiService {
   static const String _base = 'http://localhost:8000';
 
   /// Public base URL — used by screens to build full image URLs
-  static String get base => _base;
+  static String get base => 'http://10.116.81.1';
 
   static const Duration _timeout = Duration(seconds: 10);
 
@@ -42,14 +42,20 @@ class ApiService {
     String token = '',
   }) async {
     final endpoint = role == 'contractor' ? 'contractor' : 'bmc';
+    final url = '$_base/alerts/$endpoint';
+    print('TOKEN (getAlerts/$endpoint): $token');
+    print('URL: $url');
     final response = await http.get(
-      Uri.parse('$_base/alerts/$endpoint'),
+      Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    print('RESPONSE (getAlerts): ${response.statusCode} ${response.body}');
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.cast<Map<String, dynamic>>();
+    } else if (response.statusCode == 401) {
+      throw Exception('Session expired. Please login again.');
     } else {
       throw Exception(_errorMessage(response, 'Failed to load alerts'));
     }
@@ -59,15 +65,21 @@ class ApiService {
   static Future<Map<String, dynamic>> getBmcDashboard({
     String token = '',
   }) async {
+    final url = '$_base/bmc/dashboard';
+    print('TOKEN (BMC dashboard): $token');
+    print('URL: $url');
     final response = await http.get(
-      Uri.parse('$_base/bmc/dashboard'),
+      Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    print('RESPONSE (BMC dashboard): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
-    } else {
-      throw Exception(_errorMessage(response, 'Failed to load BMC dashboard'));
     }
+    if (response.statusCode == 401) {
+      throw Exception('Session expired. Please login again.');
+    }
+    throw Exception(_errorMessage(response, 'Failed to load BMC dashboard'));
   }
 
   static Future<Map<String, dynamic>> getSiteByQr(
@@ -112,12 +124,19 @@ class ApiService {
 
   static Future<void> approveTruck(
       String pickupId, String status, {String token = ''}) async {
+    final url = '$_base/bmc/trucks/$pickupId/approve';
+    print('TOKEN (approveTruck): $token');
+    print('URL: $url');
     final response = await http.post(
-      Uri.parse('$_base/bmc/trucks/$pickupId/approve'),
+      Uri.parse(url),
       headers: _authHeaders(token),
       body: jsonEncode({'status': status}),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    print('RESPONSE (approveTruck): ${response.statusCode} ${response.body}');
     if (response.statusCode != 200 && response.statusCode != 201) {
+      if (response.statusCode == 401) {
+        throw Exception('Session expired. Please login again.');
+      }
       throw Exception(_errorMessage(response, 'Failed to update truck status'));
     }
   }
@@ -125,13 +144,21 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getBmcPickups({
     String token = '',
   }) async {
+    // Uses /pickups/all — no contractor auth required, works with BMC token
+    final url = '$_base/pickups/all';
+    print('TOKEN (getBmcPickups): $token');
+    print('URL: $url');
     final response = await http.get(
-      Uri.parse('$_base/pickups/contractor'),
+      Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    print('RESPONSE (getBmcPickups): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.cast<Map<String, dynamic>>();
+    }
+    if (response.statusCode == 401) {
+      throw Exception('Session expired. Please login again.');
     }
     throw Exception(_errorMessage(response, 'Failed to load pickups'));
   }
@@ -139,10 +166,14 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getBmcComplaints({
     String token = '',
   }) async {
+    final url = '$_base/citizen/queries/all';
+    print('TOKEN (getBmcComplaints): $token');
+    print('URL: $url');
     final response = await http.get(
-      Uri.parse('$_base/citizen/queries/all'),
+      Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    print('RESPONSE (getBmcComplaints): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.cast<Map<String, dynamic>>();
@@ -516,13 +547,25 @@ class ApiService {
     required String role,
     String token = '',
   }) async {
+    // BMC officials don't have a profile endpoint — return a stub
+    if (role == 'bmc') {
+      print('TOKEN (BMC profile): $token');
+      return {'name': 'BMC Official', 'contact': '', 'email': 'admin@bmc.gov'};
+    }
     final endpoint = (role == 'citizen') ? 'citizen' : 'contractor';
+    final url = '$_base/profile/$endpoint';
+    print('TOKEN ($role profile): $token');
+    print('URL: $url');
     final response = await http.get(
-      Uri.parse('$_base/profile/$endpoint'),
+      Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    print('RESPONSE (profile): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    if (response.statusCode == 401) {
+      throw Exception('Session expired. Please login again.');
     }
     throw Exception(_errorMessage(response, 'Failed to load profile'));
   }
@@ -536,6 +579,10 @@ class ApiService {
     String companyName = '',
     String address = '',
   }) async {
+    // BMC officials don't have an editable profile endpoint
+    if (role == 'bmc') {
+      throw Exception('BMC profile editing is not supported.');
+    }
     final endpoint = (role == 'citizen') ? 'citizen' : 'contractor';
     final body = <String, dynamic>{};
     if (name.isNotEmpty)        body['name']         = name;
@@ -544,13 +591,20 @@ class ApiService {
     if (companyName.isNotEmpty) body['company_name'] = companyName;
     if (address.isNotEmpty)     body['address']      = address;
 
+    final url = '$_base/profile/$endpoint';
+    print('TOKEN ($role update profile): $token');
+    print('URL: $url');
     final response = await http.put(
-      Uri.parse('$_base/profile/$endpoint'),
+      Uri.parse(url),
       headers: _authHeaders(token),
       body: jsonEncode(body),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    print('RESPONSE (update profile): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    if (response.statusCode == 401) {
+      throw Exception('Session expired. Please login again.');
     }
     throw Exception(_errorMessage(response, 'Failed to update profile'));
   }
@@ -559,12 +613,22 @@ class ApiService {
     required String role,
     String token = '',
   }) async {
+    if (role == 'bmc') {
+      throw Exception('BMC account deletion is not supported.');
+    }
     final endpoint = (role == 'citizen') ? 'citizen' : 'contractor';
+    final url = '$_base/profile/$endpoint';
+    print('TOKEN ($role delete profile): $token');
+    print('URL: $url');
     final response = await http.delete(
-      Uri.parse('$_base/profile/$endpoint'),
+      Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    print('RESPONSE (delete profile): ${response.statusCode} ${response.body}');
     if (response.statusCode != 200) {
+      if (response.statusCode == 401) {
+        throw Exception('Session expired. Please login again.');
+      }
       throw Exception(_errorMessage(response, 'Failed to delete account'));
     }
   }

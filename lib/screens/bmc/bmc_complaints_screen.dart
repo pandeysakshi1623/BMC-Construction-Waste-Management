@@ -202,6 +202,21 @@ class _ComplaintCard extends StatelessWidget {
     required this.onResolve,
   });
 
+  String _formatDate(String? raw) {
+    if (raw == null || raw.isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                      'Jul','Aug','Sep','Oct','Nov','Dec'];
+      final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      final min = dt.minute.toString().padLeft(2, '0');
+      return '${dt.day} ${months[dt.month - 1]} ${dt.year}, $h:$min $ampm';
+    } catch (_) {
+      return raw;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = complaint['status'] ?? 'Pending';
@@ -259,7 +274,7 @@ class _ComplaintCard extends StatelessWidget {
                   AppTheme.textSecondary),
             if (complaint['created_at'] != null)
               _infoRow(Icons.calendar_today_rounded,
-                  complaint['created_at'], AppTheme.textSecondary),
+                  _formatDate(complaint['created_at'] as String?), AppTheme.textSecondary),
 
             // Action buttons — only for pending complaints
             if (isPending) ...[

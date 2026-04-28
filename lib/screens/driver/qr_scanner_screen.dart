@@ -13,7 +13,10 @@ class QrScannerScreen extends StatefulWidget {
 class _QrScannerScreenState extends State<QrScannerScreen> {
   bool _scanned = false;
   bool _validating = false;
-  final MobileScannerController _controller = MobileScannerController();
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    formats: [BarcodeFormat.qrCode],
+  );
 
   @override
   void dispose() {
@@ -30,11 +33,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     await _controller.stop();
 
     final code = barcode!.rawValue!;
-    final isValid = await ApiService.validateQrCode(code);
-
-    setState(() => _validating = false);
+    bool isValid = false;
+    try {
+      isValid = await ApiService.validateQrCode(code);
+    } catch (_) {
+      isValid = false;
+    }
 
     if (!mounted) return;
+    setState(() => _validating = false);
 
     if (isValid) {
       showDialog(

@@ -38,10 +38,17 @@ async def fetch_site_details(site_id: str):
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
     
-    # We can also fetch the master db details for this site
     master_info = await bmc_master_collection.find_one({"site_id": site_id})
     penalties = await penalty_collection.find({"site_id": site_id, "penalty_status": "Active"}).to_list(100)
-    
+
+    # Fetch contractor name to show instead of raw ID
+    contractor_name = None
+    contractor_id = site.get("contractor_id")
+    if contractor_id:
+        contractor = await contractor_collection.find_one({"contractor_id": str(contractor_id)})
+        if contractor:
+            contractor_name = contractor.get("name") or contractor.get("company_name")
+
     # Fix ObjectId serialization
     if site and "_id" in site:
         site["_id"] = str(site["_id"])
@@ -50,7 +57,11 @@ async def fetch_site_details(site_id: str):
     for p in penalties:
         if "_id" in p:
             p["_id"] = str(p["_id"])
-            
+
+    # Inject contractor name into site dict for easy Flutter access
+    if contractor_name:
+        site["contractor_name"] = contractor_name
+
     return {
         "site": site,
         "master_record": master_info,

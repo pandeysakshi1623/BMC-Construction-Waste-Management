@@ -75,6 +75,15 @@ async def request_pickup(
     return {"message": "Pickup scheduled successfully", "pickup_id": pickup_id}
 
 
+@router.get("/all")
+async def get_all_pickups():
+    """Return ALL pickups — used by BMC dashboard (no auth required)."""
+    pickups = []
+    async for p in pickup_collection.find({}):
+        pickups.append(_serialize(p))
+    return pickups
+
+
 @router.get("/driver")
 async def get_driver_pickups(current_user: dict = Depends(get_current_user)):
     """Return all pickups assigned to or available for the logged-in driver."""

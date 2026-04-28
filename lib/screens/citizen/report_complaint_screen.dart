@@ -34,6 +34,9 @@ class _ReportComplaintScreenState extends State<ReportComplaintScreen> {
   bool _fetchingLoc = false;
   bool _submitting  = false;
 
+  // Stamp captured when image is picked
+  DateTime? _capturedAt;
+
   // resolved site info (from QR image scan or manual entry)
   String _resolvedSiteId   = '';
   String _resolvedSiteName = '';
@@ -106,7 +109,14 @@ class _ReportComplaintScreenState extends State<ReportComplaintScreen> {
 
   Future<void> _pickImage() async {
     final f = await ImageService.pickImage(context);
-    if (f != null) setState(() => _image = f);
+    if (f != null) {
+      setState(() {
+        _image = f;
+        _capturedAt = DateTime.now();
+      });
+      // Auto-fetch location when image is picked if not already fetched
+      if (_lat == null) _fetchLocation();
+    }
   }
 
   Future<void> _fetchLocation() async {
@@ -331,6 +341,19 @@ class _ReportComplaintScreenState extends State<ReportComplaintScreen> {
             ),
             AppTheme.gapMD,
 
+            // ── Location + date stamp (shown after image is picked) ───────
+            if (_image != null && _capturedAt != null)
+              _StampBanner(
+                capturedAt: _capturedAt!,
+                location: _fetchingLoc
+                    ? 'Fetching location…'
+                    : (_address ??
+                        (_lat != null
+                            ? LocationService.format(_lat!, _lng!)
+                            : 'Location not fetched')),
+                color: AppTheme.citizen,
+              ),
+
             // ── Description ───────────────────────────────────────────────
             TextFormField(
               controller: _descCtrl,
@@ -404,6 +427,63 @@ class _ReportComplaintScreenState extends State<ReportComplaintScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Stamp banner — shown below image after picking ────────────────────────────
+class _StampBanner extends StatelessWidget {
+  final DateTime capturedAt;
+  final String location;
+  final Color color;
+  const _StampBanner({
+    required this.capturedAt,
+    required this.location,
+    required this.color,
+  });
+
+  String _fmtDate(DateTime dt) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                    'Jul','Aug','Sep','Oct','Nov','Dec'];
+    final hour24 = dt.hour;
+    final h = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+    final ampm = hour24 >= 12 ? 'PM' : 'AM';
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}  $h:$min $ampm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTheme.spMD),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.calendar_today_rounded, size: 13, color: color),
+            const SizedBox(width: 6),
+            Text(_fmtDate(capturedAt),
+                style: TextStyle(fontSize: 12, color: color,
+                    fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 5),
+          Row(children: [
+            Icon(Icons.location_on_rounded, size: 13, color: color),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(location,
+                  style: TextStyle(fontSize: 12, color: color),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+          ]),
+        ],
       ),
     );
   }

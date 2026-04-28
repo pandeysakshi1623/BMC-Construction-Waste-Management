@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/complaint_model.dart';
@@ -19,16 +20,25 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
   List<ComplaintModel> _complaints = [];
   bool _loading = true;
   final Set<String> _notified = {};
-  int _selectedIndex = 0; // bottom nav index
+  int _selectedIndex = 0;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Poll every 10 seconds so status changes appear without manual refresh
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _load(silent: true));
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) setState(() => _loading = true);
     try {
       final token = context.read<AuthProvider>().user?.token ?? '';
       final data = await ApiService.getComplaints(token: token);
@@ -39,9 +49,9 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
           NotificationService.complaintResolved(c.description);
         }
       }
-      setState(() => _complaints = loaded);
+      if (mounted) setState(() => _complaints = loaded);
     } catch (_) {
-      if (mounted) {
+      if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Failed to load complaints'),
           backgroundColor: AppTheme.error,
@@ -328,6 +338,22 @@ class _ComplaintTile extends StatelessWidget {
   final ComplaintModel complaint;
   const _ComplaintTile({required this.complaint});
 
+  String _formatDate(String raw) {
+    if (raw.isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                      'Jul','Aug','Sep','Oct','Nov','Dec'];
+      final hour24 = dt.hour;
+      final h = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+      final ampm = hour24 >= 12 ? 'PM' : 'AM';
+      final min = dt.minute.toString().padLeft(2, '0');
+      return '${dt.day} ${months[dt.month - 1]} ${dt.year}, $h:$min $ampm';
+    } catch (_) {
+      return raw;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -351,7 +377,7 @@ class _ComplaintTile extends StatelessWidget {
           ],
           if (complaint.createdAt.isNotEmpty) ...[
             const SizedBox(height: AppTheme.spXS),
-            _row(Icons.calendar_today_rounded, complaint.createdAt),
+            _row(Icons.calendar_today_rounded, _formatDate(complaint.createdAt)),
           ],
         ],
       ),

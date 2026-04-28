@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../utils/app_theme.dart';
 
 class BmcTruckApprovalScreen extends StatefulWidget {
   const BmcTruckApprovalScreen({super.key});
@@ -11,202 +12,216 @@ class BmcTruckApprovalScreen extends StatefulWidget {
       _BmcTruckApprovalScreenState();
 }
 
-class _BmcTruckApprovalScreenState extends State<BmcTruckApprovalScreen> {
+class _BmcTruckApprovalScreenState extends State<BmcTruckApprovalScreen>
+    with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _pickups = [];
   bool _loading = true;
   String? _error;
+  late TabController _tabs;
 
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(length: 3, vsync: this);
     _load();
   }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  // ── Categorise pickups ────────────────────────────────────────────────────
+  List<Map<String, dynamic>> get _ongoing => _pickups.where((p) {
+        final s = (p['status'] ?? '').toString().toLowerCase();
+        return s == 'accepted' || s == 'in progress' || s == 'inprogress';
+      }).toList();
+
+  List<Map<String, dynamic>> get _upcoming => _pickups.where((p) {
+        final s = (p['status'] ?? '').toString().toLowerCase();
+        return s == 'pending';
+      }).toList();
+
+  List<Map<String, dynamic>> get _past => _pickups.where((p) {
+        final s = (p['status'] ?? '').toString().toLowerCase();
+        return s == 'completed' || s == 'failed' ||
+            s == 'approved' || s == 'rejected';
+      }).toList();
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
       final token = context.read<AuthProvider>().user?.token ?? '';
+      print('TOKEN (BmcTruckApproval load): $token');
       final data = await ApiService.getBmcPickups(token: token);
       setState(() => _pickups = data);
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      // Do NOT redirect to login — just show the error
+      setState(() => _error = msg);
     } finally {
-      setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _updateStatus(String pickupId, String status) async {
-    try {
-      final token = context.read<AuthProvider>().user?.token ?? '';
-      await ApiService.approveTruck(pickupId, status, token: token);
-
-      // Update local state
-      setState(() {
-        final idx = _pickups.indexWhere((p) => p['id'] == pickupId);
-        if (idx != -1) _pickups[idx] = {..._pickups[idx], 'status': status};
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Truck $status successfully'),
-          backgroundColor:
-              status == 'Approved' ? Colors.green : Colors.red,
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: Colors.red,
-        ));
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('Truck Approvals'),
-        backgroundColor: const Color(0xFF1A237E),
+        title: const Text('All Pickups'),
+        backgroundColor: AppTheme.bmc,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _load,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
         ],
+        bottom: TabBar(
+          controller: _tabs,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
+          indicatorColor: Colors.white,
+          tabs: [
+            Tab(text: 'Ongoing (${_ongoing.length})'),
+            Tab(text: 'Upcoming (${_upcoming.length})'),
+            Tab(text: 'Past (${_past.length})'),
+          ],
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? _ErrorView(message: _error!, onRetry: _load)
-              : _pickups.isEmpty
-                  ? _EmptyView()
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _pickups.length,
-                        itemBuilder: (_, i) => _TruckCard(
-                          pickup: _pickups[i],
-                          onApprove: () =>
-                              _updateStatus(_pickups[i]['id'], 'Approved'),
-                          onReject: () =>
-                              _updateStatus(_pickups[i]['id'], 'Rejected'),
-                        ),
-                      ),
-                    ),
+              : TabBarView(
+                  controller: _tabs,
+                  children: [
+                    _PickupList(pickups: _ongoing,  emptyMessage: 'No ongoing pickups'),
+                    _PickupList(pickups: _upcoming, emptyMessage: 'No upcoming pickups'),
+                    _PickupList(pickups: _past,     emptyMessage: 'No past pickups'),
+                  ],
+                ),
     );
   }
 }
 
-class _TruckCard extends StatelessWidget {
-  final Map<String, dynamic> pickup;
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
+// ── Scrollable list per tab ───────────────────────────────────────────────────
+class _PickupList extends StatelessWidget {
+  final List<Map<String, dynamic>> pickups;
+  final String emptyMessage;
 
-  const _TruckCard({
-    required this.pickup,
-    required this.onApprove,
-    required this.onReject,
+  const _PickupList({
+    required this.pickups,
+    required this.emptyMessage,
   });
 
+  @override
+  Widget build(BuildContext context) {
+    if (pickups.isEmpty) {
+      return Center(
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.local_shipping_outlined, size: 56, color: Colors.grey[300]),
+          const SizedBox(height: 12),
+          Text(emptyMessage,
+              style: TextStyle(color: Colors.grey[500], fontSize: 15)),
+        ]),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: () async {},
+      child: ListView.builder(
+        padding: const EdgeInsets.all(AppTheme.spMD),
+        itemCount: pickups.length,
+        itemBuilder: (_, i) => _TruckCard(pickup: pickups[i]),
+      ),
+    );
+  }
+}
+
+// ── Individual pickup card ────────────────────────────────────────────────────
+class _TruckCard extends StatelessWidget {
+  final Map<String, dynamic> pickup;
+
+  const _TruckCard({required this.pickup});
+
   Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'approved': return Colors.green;
-      case 'rejected': return Colors.red;
-      case 'completed': return Colors.blue;
-      default: return Colors.orange;
+    switch (status.toLowerCase().replaceAll(' ', '')) {
+      case 'approved':   return AppTheme.success;
+      case 'completed':  return AppTheme.success;
+      case 'rejected':   return AppTheme.error;
+      case 'failed':     return AppTheme.error;
+      case 'inprogress': return const Color(0xFF3949AB);
+      case 'accepted':   return AppTheme.info;
+      default:           return AppTheme.pending;
+    }
+  }
+
+  String _formatDate(String? raw) {
+    if (raw == null || raw.isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                      'Jul','Aug','Sep','Oct','Nov','Dec'];
+      return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return raw;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final status = pickup['status'] ?? 'Pending';
-    final isDone =
-        status == 'Approved' || status == 'Rejected';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
+    final color = _statusColor(status);
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTheme.spMD),
+      decoration: AppTheme.cardDecoration,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppTheme.spMD),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    pickup['site_name'] ?? 'Unknown Site',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
+            // Header
+            Row(children: [
+              Expanded(
+                child: Text(
+                  pickup['site_name'] ?? 'Unknown Site',
+                  style: AppTheme.heading3,
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _statusColor(status).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: _statusColor(status).withOpacity(0.4)),
-                  ),
-                  child: Text(status,
-                      style: TextStyle(
-                          color: _statusColor(status),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                  border: Border.all(color: color.withOpacity(0.4)),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
+                child: Text(status,
+                    style: TextStyle(
+                        color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+              ),
+            ]),
+            const SizedBox(height: AppTheme.spSM),
+
+            // Info rows
             _infoRow(Icons.location_on_outlined,
-                pickup['location'] ?? '-'),
+                pickup['location']?.toString().isNotEmpty == true
+                    ? pickup['location']
+                    : 'N/A'),
             const SizedBox(height: 4),
             _infoRow(Icons.calendar_today_outlined,
-                pickup['scheduled_date'] ?? '-'),
+                _formatDate(pickup['scheduled_date']?.toString())),
             if (pickup['driver_name'] != null) ...[
               const SizedBox(height: 4),
-              _infoRow(Icons.person_outline, pickup['driver_name']),
+              _infoRow(Icons.person_outline, pickup['driver_name'].toString()),
             ],
             if (pickup['driver_vehicle'] != null) ...[
               const SizedBox(height: 4),
               _infoRow(Icons.local_shipping_outlined,
-                  pickup['driver_vehicle']),
+                  pickup['driver_vehicle'].toString()),
             ],
-            if (!isDone) ...[
-              const Divider(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: onApprove,
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white),
-                      icon: const Icon(Icons.check, size: 16),
-                      label: const Text('Approve'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onReject,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.red),
-                      ),
-                      icon: const Icon(Icons.close, size: 16),
-                      label: const Text('Reject'),
-                    ),
-                  ),
-                ],
-              ),
+            if (pickup['waste_type'] != null) ...[
+              const SizedBox(height: 4),
+              _infoRow(Icons.delete_outline_rounded,
+                  pickup['waste_type'].toString()),
             ],
           ],
         ),
@@ -214,18 +229,18 @@ class _TruckCard extends StatelessWidget {
     );
   }
 
-  Widget _infoRow(IconData icon, String text) => Row(
-        children: [
-          Icon(icon, size: 13, color: Colors.grey[500]),
-          const SizedBox(width: 6),
-          Expanded(
+  Widget _infoRow(IconData icon, String text) => Row(children: [
+        Icon(icon, size: 13, color: AppTheme.textHint),
+        const SizedBox(width: 6),
+        Expanded(
             child: Text(text,
-                style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-          ),
-        ],
-      );
+                style: AppTheme.caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis)),
+      ]);
 }
 
+// ── Error view ────────────────────────────────────────────────────────────────
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
@@ -233,33 +248,17 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+        child: Padding(
+          padding: const EdgeInsets.all(AppTheme.spLG),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.error),
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red)),
+                style: const TextStyle(color: AppTheme.error)),
             const SizedBox(height: 16),
             ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
-      );
-}
-
-class _EmptyView extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.local_shipping_outlined,
-                size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            Text('No pickups pending approval',
-                style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-          ],
+          ]),
         ),
       );
 }

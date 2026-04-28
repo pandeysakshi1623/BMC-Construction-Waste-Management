@@ -27,8 +27,8 @@ class _BmcDashboardScreenState extends State<BmcDashboardScreen> {
   void initState() {
     super.initState();
     _load();
-    // Real-time: auto-refresh every 30 seconds
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _load());
+    // Refresh every 10 seconds so new complaints appear quickly
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _load());
   }
 
   @override
@@ -96,7 +96,9 @@ class _BmcDashboardScreenState extends State<BmcDashboardScreen> {
         recentComplaints: _recentComplaints,
         onRefresh: _load,
       ),
-      const BmcComplaintsScreen(),
+      // Key forces BmcComplaintsScreen to re-init (and re-fetch) each time
+      // the tab is selected, so new complaints appear immediately.
+      BmcComplaintsScreen(key: ValueKey('complaints_$_navIndex')),
       const BmcTruckApprovalScreen(),
       const BmcAlertsScreen(),
     ];
@@ -152,7 +154,11 @@ class _BmcDashboardScreenState extends State<BmcDashboardScreen> {
       body: pages[_navIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _navIndex,
-        onDestinationSelected: (i) => setState(() => _navIndex = i),
+        onDestinationSelected: (i) {
+          setState(() => _navIndex = i);
+          // Reload data whenever user taps Dashboard or Complaints tab
+          if (i == 0 || i == 1) _load();
+        },
         indicatorColor: AppTheme.bmc.withOpacity(0.15),
         destinations: [
           const NavigationDestination(

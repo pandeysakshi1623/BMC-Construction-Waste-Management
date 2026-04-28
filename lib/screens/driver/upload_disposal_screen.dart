@@ -5,6 +5,7 @@ import '../../models/pickup_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/image_service.dart';
+import '../../services/location_service.dart';
 import '../../widgets/loading_button.dart';
 
 class UploadDisposalScreen extends StatefulWidget {
@@ -18,9 +19,33 @@ class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
   XFile? _image;
   bool _submitting = false;
 
+  // Stamp captured when image is picked
+  DateTime? _capturedAt;
+  String _capturedLocation = 'Fetching location…';
+
   Future<void> _pickImage() async {
     final file = await ImageService.pickImage(context);
-    if (file != null) setState(() => _image = file);
+    if (file != null) {
+      final now = DateTime.now();
+      setState(() {
+        _image = file;
+        _capturedAt = now;
+        _capturedLocation = 'Fetching location…';
+      });
+      final result = await LocationService.getCurrentLocation();
+      if (mounted) {
+        setState(() {
+          _capturedLocation = result.success
+              ? '${result.latitude!.toStringAsFixed(5)}, ${result.longitude!.toStringAsFixed(5)}'
+              : result.error ?? 'Location not available';
+        });
+        if (result.success) {
+          final addr = await LocationService.reverseGeocode(
+              result.latitude!, result.longitude!);
+          if (mounted) setState(() => _capturedLocation = addr);
+        }
+      }
+    }
   }
 
   Future<void> _submit(PickupModel pickup) async {
@@ -149,6 +174,9 @@ class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
               ),
             ),
             const SizedBox(height: 32),
+            // ── Location + date stamp ─────────────────────────────────────
+            if (_image != null && _capturedAt != null)
+              _StampBanner(capturedAt: _capturedAt!, location: _capturedLocation),
             LoadingButton(
               isLoading: _submitting,
               label: 'Submit Proof',
@@ -158,6 +186,62 @@ class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Stamp banner — shown below image after picking ────────────────────────────
+class _StampBanner extends StatelessWidget {
+  final DateTime capturedAt;
+  final String location;
+  const _StampBanner({required this.capturedAt, required this.location});
+
+  String _fmtDate(DateTime dt) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                    'Jul','Aug','Sep','Oct','Nov','Dec'];
+    final hour24 = dt.hour;
+    final h = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+    final ampm = hour24 >= 12 ? 'PM' : 'AM';
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}  $h:$min $ampm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.deepOrange.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.deepOrange.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.calendar_today_rounded, size: 13,
+                color: Colors.deepOrange.shade700),
+            const SizedBox(width: 6),
+            Text(_fmtDate(capturedAt),
+                style: TextStyle(fontSize: 12,
+                    color: Colors.deepOrange.shade800,
+                    fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 5),
+          Row(children: [
+            Icon(Icons.location_on_rounded, size: 13,
+                color: Colors.deepOrange.shade700),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(location,
+                  style: TextStyle(fontSize: 12,
+                      color: Colors.deepOrange.shade800),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+          ]),
+        ],
       ),
     );
   }

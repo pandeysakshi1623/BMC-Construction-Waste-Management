@@ -21,6 +21,7 @@ class _BmcQrScannerScreenState extends State<BmcQrScannerScreen> {
     super.initState();
     _controller = MobileScannerController(
       detectionSpeed: DetectionSpeed.noDuplicates,
+      formats: [BarcodeFormat.qrCode],
     );
   }
 
@@ -48,7 +49,7 @@ class _BmcQrScannerScreenState extends State<BmcQrScannerScreen> {
     final barcode = capture.barcodes.firstOrNull;
     if (barcode?.rawValue == null) return;
 
-    _isProcessing = true;
+    setState(() => _isProcessing = true);
     await _controller.stop();
 
     final raw = barcode!.rawValue!;
@@ -61,9 +62,9 @@ class _BmcQrScannerScreenState extends State<BmcQrScannerScreen> {
           content: Text('Invalid QR code — not a site QR'),
           backgroundColor: Colors.red,
         ));
+        setState(() => _isProcessing = false);
+        await _controller.start();
       }
-      _isProcessing = false;
-      await _controller.start();
       return;
     }
 
@@ -74,28 +75,33 @@ class _BmcQrScannerScreenState extends State<BmcQrScannerScreen> {
       final siteData = await ApiService.getSiteByQr(siteId, token: token);
 
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() { _loading = false; });
       _showSiteResult(siteData, siteId);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() { _loading = false; _isProcessing = false; });
       _showError(e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
-  void _showSiteResult(Map<String, dynamic> site, String siteId) {
+  void _showSiteResult(Map<String, dynamic> response, String siteId) {
+    // Backend returns { "site": {...}, "master_record": {...}, "active_penalties": [...] }
+    // Extract the nested site object
+    final siteData = (response['site'] as Map<String, dynamic>?) ?? response;
+    final penalties = (response['active_penalties'] as List<dynamic>?) ?? [];
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _SiteResultSheet(
-        site: site,
+        site: siteData,
         siteId: siteId,
+        activePenalties: penalties,
         onPenaltyAdded: () => Navigator.pop(context),
       ),
     ).then((_) {
-      // Allow re-scan after sheet closes
       _isProcessing = false;
       _controller.start();
     });
@@ -189,11 +195,13 @@ class _BmcQrScannerScreenState extends State<BmcQrScannerScreen> {
 class _SiteResultSheet extends StatefulWidget {
   final Map<String, dynamic> site;
   final String siteId;
+  final List<dynamic> activePenalties;
   final VoidCallback onPenaltyAdded;
 
   const _SiteResultSheet({
     required this.site,
     required this.siteId,
+    required this.activePenalties,
     required this.onPenaltyAdded,
   });
 
@@ -235,12 +243,20 @@ class _SiteResultSheetState extends State<_SiteResultSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final site = widget.site;
+    final s = widget.site;
+
+    // Resolve each field — backend uses snake_case keys from MongoDB
+    final siteName      = s['site_name']      ?? s['name']             ?? '-';
+    final location      = s['location']                                ?? '-';
+    final contractorId  = s['contractor_name'] ?? s['contractor_id'] ?? s['contractor'] ?? '-';
+    final estWaste      = s['waste_estimated'] ?? s['expected_waste']  ?? s['plot_size'] ?? '-';
+    final actualWaste   = s['waste_actual']    ?? s['actual_waste']    ?? '-';
+    final pickupStatus  = s['pickup_status']   ?? s['status']          ?? '-';
+    final projectType   = s['project_type']                            ?? '';
+
     return Padding(
       padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
+        left: 20, right: 20, top: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: Column(
@@ -250,8 +266,7 @@ class _SiteResultSheetState extends State<_SiteResultSheet> {
           // Handle
           Center(
             child: Container(
-              width: 40,
-              height: 4,
+              width: 40, height: 4,
               decoration: BoxDecoration(
                   color: Colors.grey[300],
                   borderRadius: BorderRadius.circular(2)),
@@ -262,8 +277,7 @@ class _SiteResultSheetState extends State<_SiteResultSheet> {
             const Icon(Icons.check_circle, color: Colors.green),
             const SizedBox(width: 8),
             const Text('Site Found',
-                style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold)),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ]),
           const SizedBox(height: 16),
           Card(
@@ -273,18 +287,18 @@ class _SiteResultSheetState extends State<_SiteResultSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _row(Icons.business, 'Site',
-                      site['site_name'] ?? site['name'] ?? '-'),
-                  _row(Icons.location_on, 'Location',
-                      site['location'] ?? '-'),
-                  _row(Icons.engineering, 'Contractor',
-                      site['contractor_id'] ?? site['contractor'] ?? '-'),
-                  _row(Icons.delete_outline, 'Est. Waste',
-                      '${site['waste_estimated'] ?? site['expected_waste'] ?? '-'} t'),
-                  _row(Icons.delete, 'Actual Waste',
-                      '${site['waste_actual'] ?? site['actual_waste'] ?? '-'} t'),
-                  _row(Icons.info_outline, 'Status',
-                      site['pickup_status'] ?? site['status'] ?? '-'),
+                  _row(Icons.business,       'Site',          siteName),
+                  _row(Icons.location_on,    'Location',      location),
+                  _row(Icons.engineering,    'Contractor',    contractorId),
+                  if (projectType.isNotEmpty)
+                    _row(Icons.construction, 'Project Type',  projectType),
+                  _row(Icons.delete_outline, 'Est. Waste',    '$estWaste t'),
+                  _row(Icons.delete,         'Actual Waste',  '$actualWaste t'),
+                  _row(Icons.info_outline,   'Status',        pickupStatus),
+                  // Active penalties count
+                  if (widget.activePenalties.isNotEmpty)
+                    _row(Icons.gavel,        'Active Penalties',
+                        '${widget.activePenalties.length} issued'),
                 ],
               ),
             ),
@@ -300,8 +314,7 @@ class _SiteResultSheetState extends State<_SiteResultSheet> {
                   borderRadius: BorderRadius.circular(8)),
             ),
             icon: const Icon(Icons.gavel),
-            label: const Text('Add Penalty',
-                style: TextStyle(fontSize: 15)),
+            label: const Text('Add Penalty', style: TextStyle(fontSize: 15)),
           ),
           const SizedBox(height: 8),
           OutlinedButton(

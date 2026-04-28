@@ -21,6 +21,7 @@ class _CitizenQrScannerScreenState extends State<CitizenQrScannerScreen> {
     super.initState();
     _controller = MobileScannerController(
       detectionSpeed: DetectionSpeed.noDuplicates,
+      formats: [BarcodeFormat.qrCode],
     );
   }
 
@@ -44,13 +45,13 @@ class _CitizenQrScannerScreenState extends State<CitizenQrScannerScreen> {
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_isProcessing) return;
+    if (_isProcessing || _loading) return;
 
     final barcode = capture.barcodes.firstOrNull;
     final rawValue = barcode?.rawValue;
     if (rawValue == null || rawValue.isEmpty) return;
 
-    _isProcessing = true;
+    setState(() => _isProcessing = true);
 
     // Stop camera immediately — prevents flickering + repeated detections
     await _controller.stop();
@@ -64,24 +65,19 @@ class _CitizenQrScannerScreenState extends State<CitizenQrScannerScreen> {
           content: Text('Invalid QR code — not a site QR'),
           backgroundColor: Colors.red,
         ));
+        setState(() => _isProcessing = false);
+        await _controller.start();
       }
-      _isProcessing = false;
-      await _controller.start();
       return;
     }
 
     setState(() => _loading = true);
 
-    // Small delay for stability
-    await Future.delayed(const Duration(milliseconds: 300));
-
     try {
-      print('API CALLED: getSiteByQrPublic($siteId)');
       final data = await ApiService.getSiteByQrPublic(siteId);
-      print('SITE RESPONSE: $data');
 
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() { _loading = false; _isProcessing = false; });
 
       // Navigate — do NOT restart camera after success
       Navigator.pushReplacement(
@@ -95,9 +91,7 @@ class _CitizenQrScannerScreenState extends State<CitizenQrScannerScreen> {
         ),
       );
     } catch (e) {
-      print('QR ERROR: $e');
       if (!mounted) return;
-      setState(() => _loading = false);
 
       final msg = e.toString().contains('not found')
           ? 'Site not found — check QR code'
@@ -110,7 +104,7 @@ class _CitizenQrScannerScreenState extends State<CitizenQrScannerScreen> {
       ));
 
       // Reset and allow re-scan only on error
-      _isProcessing = false;
+      setState(() { _loading = false; _isProcessing = false; });
       await _controller.start();
     }
   }

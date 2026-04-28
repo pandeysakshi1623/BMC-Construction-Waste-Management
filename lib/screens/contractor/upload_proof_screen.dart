@@ -5,6 +5,7 @@ import '../../models/site_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/image_service.dart';
+import '../../services/location_service.dart';
 import '../../widgets/loading_button.dart';
 import 'proof_history_screen.dart';
 
@@ -23,6 +24,10 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
   String? _uploadedImageUrl;
   final _quantityController = TextEditingController();
   bool _submitting = false;
+
+  // Stamp captured when image is picked
+  DateTime? _capturedAt;
+  String _capturedLocation = 'Fetching location…';
 
   // Verification state
   _CollectionStatus _status = _CollectionStatus.notStarted;
@@ -56,10 +61,28 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
     }
     final file = await ImageService.pickImage(context);
     if (file != null) {
+      // Stamp date + fetch location at the moment of capture
+      final now = DateTime.now();
       setState(() {
         _image = file;
         _uploadedImageUrl = null;
+        _capturedAt = now;
+        _capturedLocation = 'Fetching location…';
       });
+      // Fetch location in background
+      final result = await LocationService.getCurrentLocation();
+      if (mounted) {
+        setState(() {
+          _capturedLocation = result.success
+              ? '${result.latitude!.toStringAsFixed(5)}, ${result.longitude!.toStringAsFixed(5)}'
+              : result.error ?? 'Location not available';
+        });
+        if (result.success) {
+          final addr = await LocationService.reverseGeocode(
+              result.latitude!, result.longitude!);
+          if (mounted) setState(() => _capturedLocation = addr);
+        }
+      }
     }
   }
 
@@ -441,6 +464,10 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
             ),
             const SizedBox(height: 14),
 
+            // ── Location + date stamp (shown after image is picked) ───────
+            if (_image != null && _capturedAt != null)
+              _StampBanner(capturedAt: _capturedAt!, location: _capturedLocation),
+
             // ── Waste quantity ────────────────────────────────────────────
             TextFormField(
               controller: _quantityController,
@@ -481,6 +508,58 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
             const SizedBox(height: 20),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Stamp banner — shown below image after picking ────────────────────────────
+class _StampBanner extends StatelessWidget {
+  final DateTime capturedAt;
+  final String location;
+  const _StampBanner({required this.capturedAt, required this.location});
+
+  String _fmtDate(DateTime dt) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                    'Jul','Aug','Sep','Oct','Nov','Dec'];
+    final hour24 = dt.hour;
+    final h = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+    final ampm = hour24 >= 12 ? 'PM' : 'AM';
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}  $h:$min $ampm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.calendar_today_rounded, size: 13, color: Colors.blue.shade700),
+            const SizedBox(width: 6),
+            Text(_fmtDate(capturedAt),
+                style: TextStyle(fontSize: 12, color: Colors.blue.shade800,
+                    fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 5),
+          Row(children: [
+            Icon(Icons.location_on_rounded, size: 13, color: Colors.blue.shade700),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(location,
+                  style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+          ]),
+        ],
       ),
     );
   }

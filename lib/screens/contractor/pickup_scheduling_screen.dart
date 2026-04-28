@@ -17,10 +17,16 @@ class _PickupSchedulingScreenState extends State<PickupSchedulingScreen> {
   bool _loading = false;
 
   Future<void> _pickDate() async {
+    // firstDate = tomorrow — today and all past dates are disabled
+    final tomorrow = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day + 1,
+    );
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().add(const Duration(days: 1)),
-      firstDate: DateTime.now(),
+      initialDate: tomorrow,
+      firstDate: tomorrow,
       lastDate: DateTime.now().add(const Duration(days: 60)),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
@@ -112,7 +118,7 @@ class _PickupSchedulingScreenState extends State<PickupSchedulingScreen> {
 
             Text('Select Pickup Date', style: AppTheme.heading3),
             AppTheme.gapSM,
-            Text('Choose a date within the next 60 days',
+            Text('Choose a future date within the next 60 days',
                 style: AppTheme.caption),
             AppTheme.gapMD,
 

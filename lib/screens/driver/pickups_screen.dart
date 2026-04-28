@@ -101,6 +101,17 @@ class _PickupsScreenState extends State<PickupsScreen>
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (provider.error != null) {
+                  // Handle session expiry
+                  if (provider.error!.contains('Session expired') ||
+                      provider.error!.contains('401')) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) async {
+                      await context.read<AuthProvider>().handleUnauthorized();
+                      if (context.mounted) {
+                        Navigator.pushNamedAndRemoveUntil(
+                            context, '/login', (_) => false);
+                      }
+                    });
+                  }
                   return _ErrorView(
                       message: provider.error!,
                       onRetry: provider.loadPickups);
@@ -209,6 +220,18 @@ class _PickupCard extends StatelessWidget {
   final PickupModel pickup;
   const _PickupCard({required this.pickup});
 
+  String _formatDate(String raw) {
+    if (raw.isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                      'Jul','Aug','Sep','Oct','Nov','Dec'];
+      return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -233,9 +256,9 @@ class _PickupCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            _row(Icons.location_on_outlined, pickup.location),
+            _row(Icons.location_on_outlined, pickup.location.isNotEmpty ? pickup.location : 'N/A'),
             const SizedBox(height: 4),
-            _row(Icons.calendar_today_outlined, pickup.scheduledDate),
+            _row(Icons.calendar_today_outlined, _formatDate(pickup.scheduledDate)),
             const SizedBox(height: 4),
             _row(Icons.delete_outline, pickup.wasteType),
             if (pickup.notes != null && pickup.notes!.isNotEmpty) ...[

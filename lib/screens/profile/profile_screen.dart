@@ -48,14 +48,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
+    // BMC officials don't have a profile endpoint — show stub immediately
+    if (_role == 'bmc') {
+      setState(() {
+        _profile = {'name': 'BMC Official', 'contact': '', 'email': 'admin@bmc.gov'};
+        _loading = false;
+      });
+      _fillControllers(_profile!);
+      return;
+    }
     try {
+      print('TOKEN (profile load): $_token');
       final data = await ApiService.getProfile(role: _role, token: _token);
       _fillControllers(data);
       setState(() => _profile = data);
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      if (msg.contains('Session expired') || msg.contains('401')) {
+        await context.read<AuthProvider>().handleUnauthorized();
+        if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+        return;
+      }
+      setState(() => _error = msg);
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -156,7 +172,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         foregroundColor: Colors.white,
         title: const Text('My Profile'),
         actions: [
-          if (!_loading && _error == null)
+          // BMC profile is read-only — no edit button
+          if (_role != 'bmc' && !_loading && _error == null)
             IconButton(
               icon: Icon(_editing ? Icons.close_rounded : Icons.edit_rounded),
               tooltip: _editing ? 'Cancel' : 'Edit',
@@ -247,24 +264,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           AppTheme.gapMD,
                         ],
 
-                        // Danger zone
-                        const Divider(),
-                        AppTheme.gapMD,
-                        Text('Danger Zone',
-                            style: AppTheme.caption.copyWith(
-                                color: AppTheme.error,
-                                fontWeight: FontWeight.w600)),
-                        AppTheme.gapSM,
-                        OutlinedButton.icon(
-                          onPressed: _deleteAccount,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.error,
-                            side: const BorderSide(color: AppTheme.error),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                        // Danger zone — hidden for BMC
+                        if (_role != 'bmc') ...[
+                          const Divider(),
+                          AppTheme.gapMD,
+                          Text('Danger Zone',
+                              style: AppTheme.caption.copyWith(
+                                  color: AppTheme.error,
+                                  fontWeight: FontWeight.w600)),
+                          AppTheme.gapSM,
+                          OutlinedButton.icon(
+                            onPressed: _deleteAccount,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.error,
+                              side: const BorderSide(color: AppTheme.error),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: const Icon(Icons.delete_forever_rounded),
+                            label: const Text('Delete My Account'),
                           ),
-                          icon: const Icon(Icons.delete_forever_rounded),
-                          label: const Text('Delete My Account'),
-                        ),
+                        ],
                       ],
                     ),
                   ),

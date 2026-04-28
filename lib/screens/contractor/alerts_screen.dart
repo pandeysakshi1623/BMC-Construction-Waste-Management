@@ -38,8 +38,11 @@ class _AlertsScreenState extends State<AlertsScreen> {
       final dt = DateTime.parse(raw).toLocal();
       const m = ['Jan','Feb','Mar','Apr','May','Jun',
                   'Jul','Aug','Sep','Oct','Nov','Dec'];
+      final hour24 = dt.hour;
+      final h = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+      final ampm = hour24 >= 12 ? 'PM' : 'AM';
       return '${dt.day} ${m[dt.month-1]} ${dt.year}  '
-             '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+             '${h.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')} $ampm';
     } catch (_) { return raw; }
   }
 
