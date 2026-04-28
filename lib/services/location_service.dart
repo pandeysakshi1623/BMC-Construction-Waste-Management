@@ -17,16 +17,13 @@ class LocationService {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        print('LOCATION: Services disabled');
         return const LocationResult(
             error: 'Location services are disabled. Please enable GPS.');
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
-      print('LOCATION: Permission status = $permission');
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        print('LOCATION: Permission after request = $permission');
         if (permission == LocationPermission.denied) {
           return const LocationResult(error: 'Location permission denied.');
         }
@@ -41,11 +38,9 @@ class LocationService {
       final pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      print('LAT: ${pos.latitude}, LNG: ${pos.longitude}');
 
       return LocationResult(latitude: pos.latitude, longitude: pos.longitude);
     } catch (e) {
-      print('LOCATION ERROR: $e');
       return LocationResult(error: 'Location not available. Please try again.');
     }
   }

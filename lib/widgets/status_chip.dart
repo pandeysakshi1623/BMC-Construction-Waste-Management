@@ -11,6 +11,7 @@ class StatusChip extends StatelessWidget {
       case 'resolved':   return AppTheme.success;
       case 'accepted':   return AppTheme.info;
       case 'inprogress': return const Color(0xFF3949AB);
+      case 'arrived':    return Colors.teal;
       case 'scheduled':  return const Color(0xFF00838F);
       case 'underreview':return AppTheme.warning;
       case 'failed':     return AppTheme.error;
@@ -24,6 +25,7 @@ class StatusChip extends StatelessWidget {
       case 'resolved':   return Icons.check_circle_rounded;
       case 'accepted':   return Icons.thumb_up_rounded;
       case 'inprogress': return Icons.local_shipping_rounded;
+      case 'arrived':    return Icons.location_on_rounded;
       case 'scheduled':  return Icons.schedule_rounded;
       case 'underreview':return Icons.hourglass_top_rounded;
       case 'failed':     return Icons.cancel_rounded;

@@ -74,7 +74,6 @@ class AuthProvider extends ChangeNotifier {
         final backendRole = (data['role'] as String?) ?? '';
         resolvedRole = backendRole.isNotEmpty ? backendRole : 'citizen';
       } else {
-        // contractor OR driver — both use /auth/login
         data = await ApiService.login(username, password);
         final backendRole = (data['role'] as String?) ?? '';
         resolvedRole = backendRole.isNotEmpty ? backendRole : role;
@@ -111,6 +110,11 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return null;
     }
+  }
+
+  void clearError() {
+    _error = null;
+    notifyListeners();
   }
 
   Future<void> logout() async {

@@ -63,7 +63,6 @@ async def get_site_by_qr(site_id: str):
     Public endpoint — no auth required.
     Used by Citizens and BMC to fetch site details after scanning QR.
     """
-    print(f"QR scan lookup for site_id: {site_id}")
 
     site = await site_collection.find_one({"site_id": site_id})
     if not site:
@@ -77,7 +76,6 @@ async def get_site_by_qr(site_id: str):
     site.setdefault("waste_actual", site.get("actual_waste", 0))
     site.setdefault("area", site.get("plot_size", 0))
 
-    print(f"Site found: {site.get('site_name')}")
     return site
 
 
@@ -112,10 +110,6 @@ async def upload_site_proof(
     current_user: dict = Depends(get_current_user),
 ):
     """Upload waste disposal proof image for a site."""
-    print(f"Received site_id: {site_id}")
-    print(f"Received actual_waste: {actual_waste}")
-    print(f"Received file: {image.filename}")
-    print(f"Driver verified: {driver_verified}")
 
     site = await site_collection.find_one({
         "site_id": site_id,
@@ -151,7 +145,6 @@ async def upload_site_proof(
     }
     await proof_history_collection.insert_one(history_entry)
 
-    print(f"Site proof uploaded: {file_path}")
 
     return {
         "message": "Upload successful",
@@ -165,7 +158,6 @@ async def get_proof_history(
     current_user: dict = Depends(get_current_user),
 ):
     """Return all proof upload logs for a given site."""
-    print(f"Fetching history for: {site_id}")
 
     cursor = proof_history_collection.find(
         {"site_id": site_id, "contractor_id": current_user["contractor_id"]},
@@ -176,5 +168,4 @@ async def get_proof_history(
         entry["_id"] = str(entry["_id"])
         history.append(entry)
 
-    print(f"Proof history response ({len(history)} entries): {history}")
     return history

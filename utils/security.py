@@ -2,11 +2,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from passlib.context import CryptContext
 from jose import jwt
+import os
 
-# In production this should be stored securely as an environment variable
-SECRET_KEY = "my_super_secret_jwt_key_that_should_be_changed"
+# Load from environment — never hardcode in source
+SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production-use-env-file")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES", "120"))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

@@ -223,6 +223,11 @@ class _TruckCard extends StatelessWidget {
               _infoRow(Icons.delete_outline_rounded,
                   pickup['waste_type'].toString()),
             ],
+            // Show proof image thumbnail if available
+            if (pickup['disposal_proof_url'] != null) ...[
+              const SizedBox(height: AppTheme.spSM),
+              _ProofThumbnail(proofUrl: pickup['disposal_proof_url'].toString()),
+            ],
           ],
         ),
       ),
@@ -238,6 +243,92 @@ class _TruckCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis)),
       ]);
+}
+
+// ── Proof thumbnail ───────────────────────────────────────────────────────────
+class _ProofThumbnail extends StatelessWidget {
+  final String proofUrl;
+  const _ProofThumbnail({required this.proofUrl});
+
+  String get _fullUrl {
+    if (proofUrl.startsWith('http')) return proofUrl;
+    // Backend serves static files from /static/
+    return 'http://localhost:8000$proofUrl';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => showDialog(
+        context: context,
+        builder: (_) => Dialog(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            AppBar(
+              title: const Text('Disposal Proof'),
+              backgroundColor: AppTheme.bmc,
+              foregroundColor: Colors.white,
+              automaticallyImplyLeading: false,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            Image.network(
+              _fullUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(children: [
+                  Icon(Icons.broken_image, size: 48, color: Colors.grey),
+                  SizedBox(height: 8),
+                  Text('Could not load image'),
+                ]),
+              ),
+            ),
+          ]),
+        ),
+      ),
+      child: Container(
+        height: 80,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+          border: Border.all(color: AppTheme.success.withOpacity(0.4)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+          child: Stack(fit: StackFit.expand, children: [
+            Image.network(
+              _fullUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: Colors.grey[100],
+                child: const Icon(Icons.image_outlined,
+                    color: Colors.grey, size: 32),
+              ),
+            ),
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Container(
+                color: Colors.black45,
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.zoom_in, color: Colors.white, size: 12),
+                    SizedBox(width: 4),
+                    Text('Tap to view proof',
+                        style: TextStyle(color: Colors.white, fontSize: 10)),
+                  ],
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
 }
 
 // ── Error view ────────────────────────────────────────────────────────────────

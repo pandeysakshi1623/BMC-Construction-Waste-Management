@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.utils import get_openapi
-from routers import auth, sites, pickups, bmc, citizen, alerts, profile
+from routers import auth, sites, pickups, bmc, citizen, alerts, profile, driver
 from utils.scheduler import generate_penalty_alerts
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
@@ -11,8 +11,11 @@ import os
 
 load_dotenv()
 
+from database import create_indexes
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await create_indexes()
     asyncio.create_task(generate_penalty_alerts())
     yield
 
@@ -41,6 +44,7 @@ app.include_router(bmc.router)
 app.include_router(citizen.router)
 app.include_router(alerts.router)
 app.include_router(profile.router)
+app.include_router(driver.router)
 
 
 @app.get("/")

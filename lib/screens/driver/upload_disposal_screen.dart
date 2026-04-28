@@ -73,7 +73,8 @@ class _UploadDisposalScreenState extends State<UploadDisposalScreen> {
           content: Text(ok ? 'Proof uploaded!' : 'Upload failed'),
           backgroundColor: ok ? Colors.green : Colors.red,
         ));
-        if (ok) Navigator.pushReplacementNamed(context, '/driver/pickups');
+        // Return true so the caller (pickups_screen) can mark as completed
+        if (ok) Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {

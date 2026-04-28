@@ -16,7 +16,8 @@ class ComplaintsScreen extends StatefulWidget {
   State<ComplaintsScreen> createState() => _ComplaintsScreenState();
 }
 
-class _ComplaintsScreenState extends State<ComplaintsScreen> {
+class _ComplaintsScreenState extends State<ComplaintsScreen>
+    with WidgetsBindingObserver {
   List<ComplaintModel> _complaints = [];
   bool _loading = true;
   final Set<String> _notified = {};
@@ -26,13 +27,32 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
-    // Poll every 10 seconds so status changes appear without manual refresh
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _load(silent: true));
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) { if (mounted) _load(silent: true); },
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _load(silent: true);
+      _startTimer();
+    } else if (state == AppLifecycleState.paused) {
+      _refreshTimer?.cancel();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
   }

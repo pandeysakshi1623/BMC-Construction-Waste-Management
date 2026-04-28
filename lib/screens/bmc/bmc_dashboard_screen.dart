@@ -16,7 +16,8 @@ class BmcDashboardScreen extends StatefulWidget {
   State<BmcDashboardScreen> createState() => _BmcDashboardScreenState();
 }
 
-class _BmcDashboardScreenState extends State<BmcDashboardScreen> {
+class _BmcDashboardScreenState extends State<BmcDashboardScreen>
+    with WidgetsBindingObserver {
   int _navIndex = 0;
   Map<String, dynamic>? _stats;
   List<Map<String, dynamic>> _recentComplaints = [];
@@ -26,13 +27,31 @@ class _BmcDashboardScreenState extends State<BmcDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
-    // Refresh every 10 seconds so new complaints appear quickly
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _load());
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) _load();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _load();
+      _startTimer();
+    } else if (state == AppLifecycleState.paused) {
+      _refreshTimer?.cancel();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
   }

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../../models/pickup_model.dart';
 import '../../models/site_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
@@ -29,20 +31,71 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
   DateTime? _capturedAt;
   String _capturedLocation = 'Fetching location…';
 
-  // Verification state
-  _CollectionStatus _status = _CollectionStatus.notStarted;
-  bool get _isDriverVerified => _status == _CollectionStatus.inProgress ||
-      _status == _CollectionStatus.completed;
+  // Driver live location
+  Map<String, dynamic>? _driverLocation;
+  Timer? _locationPollTimer;
+
+  // The pickup passed as argument (may be null if opened without pickup context)
+  PickupModel? _pickup;
+
+  // Upload is only allowed when driver has arrived
+  bool get _isDriverArrived =>
+      _pickup != null && _pickup!.status == PickupStatus.arrived;
+
+  // Keep backward compat: if no pickup passed, fall back to old simulated flow
+  bool get _isDriverVerified =>
+      _pickup == null ? _legacyVerified : _isDriverArrived;
+
+  // Legacy simulated verification (used when no pickup is passed)
+  _CollectionStatus _legacyStatus = _CollectionStatus.notStarted;
+  bool get _legacyVerified =>
+      _legacyStatus == _CollectionStatus.inProgress ||
+      _legacyStatus == _CollectionStatus.completed;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is PickupModel) {
+        setState(() => _pickup = args);
+        _startDriverLocationPoll(args);
+      }
+    });
+  }
+
+  void _startDriverLocationPoll(PickupModel pickup) {
+    _fetchDriverLocation(pickup);
+    // Only poll while driver hasn't arrived yet — stop once arrived/completed
+    _locationPollTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (!mounted) return;
+      final current = _pickup;
+      if (current != null &&
+          (current.status == PickupStatus.completed ||
+           current.status == PickupStatus.failed)) {
+        _locationPollTimer?.cancel();
+        return;
+      }
+      _fetchDriverLocation(pickup);
+    });
+  }
+
+  Future<void> _fetchDriverLocation(PickupModel pickup) async {
+    if (pickup.driverId == null) return;
+    final token = context.read<AuthProvider>().user?.token ?? '';
+    final loc = await ApiService.getDriverLocation(pickup.driverId!, token: token);
+    if (mounted) setState(() => _driverLocation = loc);
+  }
 
   @override
   void dispose() {
     _quantityController.dispose();
+    _locationPollTimer?.cancel();
     super.dispose();
   }
 
-  // ── Driver simulated action ─────────────────────────────────────────────────
   void _driverStartCollection() {
-    setState(() => _status = _CollectionStatus.inProgress);
+    setState(() => _legacyStatus = _CollectionStatus.inProgress);
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('✅ Driver confirmed: Collection in progress'),
       backgroundColor: Colors.orange,
@@ -153,15 +206,19 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
           _uploadedImageUrl =
               imageUrl != null ? '${ApiService.base}$imageUrl' : null;
           _image = null;
-          _status = _CollectionStatus.completed;
+          _legacyStatus = _CollectionStatus.completed;
         });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Proof uploaded and recorded successfully'),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 3),
         ));
-        // Auto-navigate back after short delay
-        await Future.delayed(const Duration(seconds: 2));
+        // Show rating dialog if we have a driver
+        if (_pickup?.driverId != null) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted) await _showRatingDialog();
+        }
+        await Future.delayed(const Duration(seconds: 1));
         if (mounted) Navigator.pop(context);
       }
     } catch (e) {
@@ -177,25 +234,115 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
         backgroundColor: isError ? Colors.red : Colors.green,
       ));
 
+  // ── Rating dialog ───────────────────────────────────────────────────────────
+  Future<void> _showRatingDialog() async {
+    int selected = 0;
+    final reviewCtrl = TextEditingController();
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Row(children: [
+            Icon(Icons.star_rounded, color: Colors.amber),
+            SizedBox(width: 8),
+            Text('Rate the Driver'),
+          ]),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(_pickup?.driverName ?? 'Driver',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (i) => GestureDetector(
+                onTap: () => setS(() => selected = i + 1),
+                child: Icon(
+                  i < selected ? Icons.star_rounded : Icons.star_border_rounded,
+                  color: Colors.amber, size: 36,
+                ),
+              )),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reviewCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                hintText: 'Optional review…',
+                border: OutlineInputBorder(),
+                filled: true,
+              ),
+            ),
+          ]),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Skip'),
+            ),
+            ElevatedButton(
+              onPressed: selected == 0 ? null : () async {
+                Navigator.pop(ctx);
+                try {
+                  final token = context.read<AuthProvider>().user?.token ?? '';
+                  await ApiService.submitDriverRating(
+                    driverId: _pickup!.driverId!,
+                    rating: selected,
+                    review: reviewCtrl.text.trim(),
+                    token: token,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Rating submitted — thank you!'),
+                      backgroundColor: Colors.green,
+                    ));
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(e.toString().replaceFirst('Exception: ', '')),
+                      backgroundColor: Colors.red,
+                    ));
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+              child: const Text('Submit', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Status badge ────────────────────────────────────────────────────────────
   Widget _statusBadge() {
-    final (label, color, icon) = switch (_status) {
-      _CollectionStatus.notStarted => (
-          'Not Started',
-          Colors.red,
-          Icons.radio_button_unchecked
-        ),
-      _CollectionStatus.inProgress => (
-          'In Progress',
-          Colors.orange,
-          Icons.timelapse
-        ),
-      _CollectionStatus.completed => (
-          'Completed',
-          Colors.green,
-          Icons.check_circle
-        ),
-    };
+    String label; Color color; IconData icon;
+    if (_pickup != null) {
+      switch (_pickup!.status) {
+        case PickupStatus.arrived:
+          label = 'Driver Arrived'; color = Colors.teal; icon = Icons.location_on;
+          break;
+        case PickupStatus.inProgress:
+          label = 'In Progress'; color = Colors.orange; icon = Icons.timelapse;
+          break;
+        case PickupStatus.completed:
+          label = 'Completed'; color = Colors.green; icon = Icons.check_circle;
+          break;
+        default:
+          label = 'Pending'; color = Colors.grey; icon = Icons.hourglass_empty;
+      }
+    } else {
+      switch (_legacyStatus) {
+        case _CollectionStatus.notStarted:
+          label = 'Not Started'; color = Colors.red; icon = Icons.radio_button_unchecked;
+          break;
+        case _CollectionStatus.inProgress:
+          label = 'In Progress'; color = Colors.orange; icon = Icons.timelapse;
+          break;
+        case _CollectionStatus.completed:
+          label = 'Completed'; color = Colors.green; icon = Icons.check_circle;
+          break;
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -216,7 +363,16 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final site = ModalRoute.of(context)!.settings.arguments as SiteModel;
+    // Accept either SiteModel (old flow) or PickupModel (new flow)
+    final args = ModalRoute.of(context)!.settings.arguments;
+    final SiteModel site = args is SiteModel
+        ? args
+        : SiteModel(
+            id: _pickup?.siteId ?? '',
+            name: _pickup?.siteName ?? 'Site',
+            location: _pickup?.location ?? '',
+            area: 0, expectedWaste: 0,
+            qrCode: '', pickupStatus: '', actualWaste: 0);
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -301,7 +457,7 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── Driver verification panel ─────────────────────────────────
+            // ── Driver info + arrival status ──────────────────────────────
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -309,7 +465,7 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: _isDriverVerified
-                      ? Colors.green.shade300
+                      ? Colors.teal.shade300
                       : Colors.grey.shade300,
                 ),
               ),
@@ -317,50 +473,111 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Icon(
-                      _isDriverVerified
-                          ? Icons.local_shipping
-                          : Icons.local_shipping_outlined,
-                      color: _isDriverVerified ? Colors.green : Colors.grey,
-                      size: 18,
-                    ),
+                    Icon(Icons.local_shipping,
+                        color: _isDriverVerified ? Colors.teal : Colors.grey,
+                        size: 18),
                     const SizedBox(width: 8),
-                    Text(
-                      'Driver Verification',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: _isDriverVerified
-                              ? Colors.green
-                              : Colors.grey[700]),
-                    ),
+                    Text('Driver Status',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _isDriverVerified
+                                ? Colors.teal
+                                : Colors.grey[700])),
                   ]),
                   const SizedBox(height: 8),
-                  Text(
-                    _status == _CollectionStatus.notStarted
-                        ? '⏳ Waiting for driver to start waste collection...'
-                        : _status == _CollectionStatus.inProgress
-                            ? '🚛 Collection in progress — ready for proof upload'
-                            : '✅ Collection completed and proof recorded',
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: _isDriverVerified
-                            ? Colors.green[700]
-                            : Colors.grey[600]),
-                  ),
-                  if (_status == _CollectionStatus.notStarted) ...[
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _driverStartCollection,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
-                        ),
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Driver: Start Collection'),
-                      ),
+                  // Real driver details from pickup
+                  if (_pickup != null) ...[
+                    if (_pickup!.driverName != null)
+                      _driverRow(Icons.person_outline,
+                          'Driver: ${_pickup!.driverName!}'),
+                    if (_pickup!.driverPhone != null)
+                      _driverRow(Icons.phone_outlined,
+                          'Phone: ${_pickup!.driverPhone!}'),
+                    if (_pickup!.driverVehicle != null)
+                      _driverRow(Icons.local_shipping_outlined,
+                          'Vehicle: ${_pickup!.driverVehicle!}'),
+                    const SizedBox(height: 6),
+                    // Live location
+                    _driverRow(
+                      Icons.location_on_outlined,
+                      _driverLocation != null
+                          ? 'Location: ${(_driverLocation!['latitude'] as num).toStringAsFixed(4)}, '
+                              '${(_driverLocation!['longitude'] as num).toStringAsFixed(4)}'
+                          : 'Location: not available',
                     ),
+                    const SizedBox(height: 6),
+                    // Arrival lock message
+                    if (!_isDriverArrived)
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: const Row(children: [
+                          Icon(Icons.lock_outline,
+                              color: Colors.orange, size: 14),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Upload allowed only after driver reaches site',
+                              style: TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ]),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.teal.shade200),
+                        ),
+                        child: const Row(children: [
+                          Icon(Icons.check_circle,
+                              color: Colors.teal, size: 14),
+                          SizedBox(width: 6),
+                          Text('Driver has arrived — upload unlocked',
+                              style: TextStyle(
+                                  color: Colors.teal,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                  ] else ...[
+                    // Legacy simulated flow (no pickup passed)
+                    Text(
+                      _legacyStatus == _CollectionStatus.notStarted
+                          ? '⏳ Waiting for driver to start waste collection...'
+                          : _legacyStatus == _CollectionStatus.inProgress
+                              ? '🚛 Collection in progress — ready for proof upload'
+                              : '✅ Collection completed and proof recorded',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: _legacyVerified
+                              ? Colors.green[700]
+                              : Colors.grey[600]),
+                    ),
+                    if (_legacyStatus == _CollectionStatus.notStarted) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _driverStartCollection,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Driver: Start Collection'),
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -489,7 +706,7 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
               isLoading: _submitting,
               label: _isDriverVerified
                   ? 'Submit Verified Proof'
-                  : 'Awaiting Driver Verification',
+                  : 'Awaiting Driver Arrival',
               color: _isDriverVerified ? Colors.blue : Colors.grey,
               icon: _isDriverVerified ? Icons.upload : Icons.lock_outline,
               onPressed: _isDriverVerified ? () => _submit(site) : null,
@@ -499,7 +716,9 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  'Upload will be enabled once driver starts collection',
+                  _pickup != null
+                      ? 'Upload unlocks when driver marks "Reached Location"'
+                      : 'Upload will be enabled once driver starts collection',
                   style: TextStyle(color: Colors.grey[500], fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
@@ -512,6 +731,18 @@ class _UploadProofScreenState extends State<UploadProofScreen> {
     );
   }
 }
+
+// ── Driver info row helper ────────────────────────────────────────────────────
+Widget _driverRow(IconData icon, String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(children: [
+        Icon(icon, size: 13, color: Colors.grey[500]),
+        const SizedBox(width: 6),
+        Expanded(
+            child: Text(text,
+                style: TextStyle(fontSize: 12, color: Colors.grey[700]))),
+      ]),
+    );
 
 // ── Stamp banner — shown below image after picking ────────────────────────────
 class _StampBanner extends StatelessWidget {

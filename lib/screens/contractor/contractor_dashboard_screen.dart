@@ -20,7 +20,7 @@ class ContractorDashboardScreen extends StatefulWidget {
 }
 
 class _ContractorDashboardScreenState
-    extends State<ContractorDashboardScreen> {
+    extends State<ContractorDashboardScreen> with WidgetsBindingObserver {
   List<SiteModel> _sites = [];
   Map<String, PickupModel> _pickupBySiteId = {};
   List<Map<String, dynamic>> _penalties = [];
@@ -31,14 +31,67 @@ class _ContractorDashboardScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _load());
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _refreshTimer?.cancel();
+    // 15s is frequent enough without hammering the server
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) _loadSilent();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadSilent();
+      _startTimer();
+    } else if (state == AppLifecycleState.paused) {
+      _refreshTimer?.cancel();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  /// Silent reload — no spinner, used by timer and lifecycle resume
+  Future<void> _loadSilent() async {
+    try {
+      final auth = context.read<AuthProvider>();
+      final token = auth.user?.token ?? '';
+      final contractorId = auth.contractorId;
+      final results = await Future.wait([
+        ApiService.getContractorSites(token: token),
+        ApiService.getContractorPickups(token: token),
+        if (contractorId.isNotEmpty)
+          ApiService.getContractorPenalties(contractorId: contractorId, token: token)
+        else
+          Future.value(<Map<String, dynamic>>[]),
+      ]);
+      final sites = (results[0] as List<Map<String, dynamic>>)
+          .map(SiteModel.fromJson).toList();
+      final map = <String, PickupModel>{};
+      for (final p in results[1] as List<Map<String, dynamic>>) {
+        final pickup = PickupModel.fromJson(p);
+        map[pickup.siteId] = pickup;
+      }
+      if (mounted) {
+        setState(() {
+          _sites = sites;
+          _pickupBySiteId = map;
+          _penalties = results[2] as List<Map<String, dynamic>>;
+        });
+      }
+    } catch (_) {
+      // Silent — don't show error on background refresh
+    }
   }
 
   Future<void> _load() async {
@@ -519,7 +572,8 @@ class _SiteCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppTheme.spSM),
-                StatusChip(status: site.pickupStatus),
+                // Use live pickup status if available, else fall back to site's cached status
+                StatusChip(status: pickup?.status.value ?? site.pickupStatus),
               ],
             ),
           ),
@@ -565,7 +619,8 @@ class _SiteCard extends StatelessWidget {
               _actionBtn(context, Icons.upload_rounded, 'Proof',
                   AppTheme.success, () => Navigator.pushNamed(
                       context, '/contractor/upload-proof',
-                      arguments: site)),
+                      // Pass pickup if available so upload screen can check arrival status
+                      arguments: pickup ?? site)),
               const SizedBox(width: AppTheme.spSM),
               _actionBtn(context, Icons.history_rounded, 'History',
                   Colors.purple, () => Navigator.push(

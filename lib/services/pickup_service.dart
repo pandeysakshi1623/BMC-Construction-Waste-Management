@@ -6,6 +6,8 @@ import 'api_service.dart';
 
 class PickupService {
   static const Duration _timeout = Duration(seconds: 10);
+  // Use the same backend base as ApiService — NOT the public image base
+  static const String _base = 'http://localhost:8000';
 
   static Map<String, String> _headers(String token) => {
         'Content-Type': 'application/json',
@@ -13,15 +15,12 @@ class PickupService {
       };
 
   static Future<List<PickupModel>> getAssignedPickups({String token = ''}) async {
-    final url = '${ApiService.base}/pickups/driver';
-    print('TOKEN (getAssignedPickups): $token');
-    print('URL: $url');
+    final url = '$_base/pickups/driver';
     final res = await http.get(
       Uri.parse(url),
       headers: _headers(token),
     ).timeout(_timeout,
         onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (getAssignedPickups): ${res.statusCode} ${res.body}');
 
     if (res.statusCode == 200) {
       final List<dynamic> data = jsonDecode(res.body);
@@ -39,16 +38,13 @@ class PickupService {
     String? notes,
     String token = '',
   }) async {
-    final url = '${ApiService.base}/pickups/$pickupId/status';
-    print('TOKEN (updatePickupStatus): $token');
-    print('URL: $url');
+    final url = '$_base/pickups/$pickupId/status';
     final res = await http.patch(
       Uri.parse(url),
       headers: _headers(token),
       body: jsonEncode({'status': status, if (notes != null) 'notes': notes}),
     ).timeout(_timeout,
         onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (updatePickupStatus): ${res.statusCode} ${res.body}');
     return res.statusCode == 200;
   }
 }

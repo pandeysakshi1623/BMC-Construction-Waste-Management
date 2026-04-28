@@ -4,6 +4,7 @@ from typing import Optional
 from database import pickup_collection, site_collection, contractor_collection
 from utils.deps import get_current_user
 from utils.notify import notify_pickup_scheduled, notify_pickup_status_changed
+from datetime import datetime
 import uuid, os
 
 router = APIRouter(prefix="/pickups", tags=["Pickups"])
@@ -32,6 +33,7 @@ def _serialize(p: dict) -> dict:
     p.setdefault("driver_phone", None)
     p.setdefault("driver_vehicle", None)
     p.setdefault("notes", None)
+    p.setdefault("disposal_proof_url", None)   # always include proof URL
     return p
 
 
@@ -76,19 +78,19 @@ async def request_pickup(
 
 
 @router.get("/all")
-async def get_all_pickups():
-    """Return ALL pickups — used by BMC dashboard (no auth required)."""
+async def get_all_pickups(limit: int = 100, skip: int = 0):
+    """Return ALL pickups — used by BMC dashboard (no auth required). Paginated."""
     pickups = []
-    async for p in pickup_collection.find({}):
+    async for p in pickup_collection.find({}).sort("scheduled_date", -1).skip(skip).limit(limit):
         pickups.append(_serialize(p))
     return pickups
 
 
 @router.get("/driver")
 async def get_driver_pickups(current_user: dict = Depends(get_current_user)):
-    """Return all pickups assigned to or available for the logged-in driver."""
+    """Return all pickups available for drivers, most recent first."""
     pickups = []
-    async for p in pickup_collection.find({}):
+    async for p in pickup_collection.find({}).sort("scheduled_date", -1).limit(200):
         pickups.append(_serialize(p))
     return pickups
 
@@ -115,6 +117,9 @@ async def update_pickup_status(
     update = {"status": body.status}
     if body.notes:
         update["notes"] = body.notes
+    # Record arrival time when driver marks arrived
+    if body.status.lower() == "arrived":
+        update["arrival_time"] = datetime.utcnow().isoformat()
 
     await pickup_collection.update_one({"pickup_id": pickup_id}, {"$set": update})
 
@@ -132,6 +137,17 @@ async def update_pickup_status(
         )
 
     return {"message": f"Status updated to {body.status}"}
+
+
+@router.get("/proof-history")
+async def get_proof_history(current_user: dict = Depends(get_current_user)):
+    """Return all completed pickups that have a disposal proof image."""
+    pickups = []
+    async for p in pickup_collection.find({
+        "disposal_proof_url": {"$exists": True, "$ne": None}
+    }):
+        pickups.append(_serialize(p))
+    return pickups
 
 
 @router.post("/upload-proof")

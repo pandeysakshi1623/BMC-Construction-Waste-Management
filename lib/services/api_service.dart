@@ -4,19 +4,17 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  /// Base URL for the backend.
-  /// - macOS desktop / Chrome → http://localhost:8000
-  /// - Android emulator       → http://10.0.2.2:8000
-  /// - Real device (same WiFi)→ http://192.168.1.7:8000
-  // static const String _base = 'http://192.168.171.18:8000';
+  /// Change this one constant to switch environments.
+  /// - Chrome / macOS desktop / iOS sim → http://localhost:8000
+  /// - Android emulator                 → http://10.0.2.2:8000
+  /// - Real device (LAN)                → http://192.168.x.x:8000
   static const String _base = 'http://localhost:8000';
 
-  /// Public base URL — used by screens to build full image URLs
-  static String get base => 'http://10.116.81.1';
+  /// Same base used for image URLs (static files served by FastAPI)
+  static String get base => _base;
 
-  static const Duration _timeout = Duration(seconds: 10);
+  static const Duration _timeout = Duration(seconds: 12);
 
-  /// Builds standard auth headers for all authenticated requests
   static Map<String, String> _authHeaders(String token) => {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -43,13 +41,10 @@ class ApiService {
   }) async {
     final endpoint = role == 'contractor' ? 'contractor' : 'bmc';
     final url = '$_base/alerts/$endpoint';
-    print('TOKEN (getAlerts/$endpoint): $token');
-    print('URL: $url');
     final response = await http.get(
       Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (getAlerts): ${response.statusCode} ${response.body}');
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -66,13 +61,10 @@ class ApiService {
     String token = '',
   }) async {
     final url = '$_base/bmc/dashboard';
-    print('TOKEN (BMC dashboard): $token');
-    print('URL: $url');
     final response = await http.get(
       Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (BMC dashboard): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
@@ -125,14 +117,11 @@ class ApiService {
   static Future<void> approveTruck(
       String pickupId, String status, {String token = ''}) async {
     final url = '$_base/bmc/trucks/$pickupId/approve';
-    print('TOKEN (approveTruck): $token');
-    print('URL: $url');
     final response = await http.post(
       Uri.parse(url),
       headers: _authHeaders(token),
       body: jsonEncode({'status': status}),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (approveTruck): ${response.statusCode} ${response.body}');
     if (response.statusCode != 200 && response.statusCode != 201) {
       if (response.statusCode == 401) {
         throw Exception('Session expired. Please login again.');
@@ -146,13 +135,10 @@ class ApiService {
   }) async {
     // Uses /pickups/all — no contractor auth required, works with BMC token
     final url = '$_base/pickups/all';
-    print('TOKEN (getBmcPickups): $token');
-    print('URL: $url');
     final response = await http.get(
       Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (getBmcPickups): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.cast<Map<String, dynamic>>();
@@ -167,13 +153,10 @@ class ApiService {
     String token = '',
   }) async {
     final url = '$_base/citizen/queries/all';
-    print('TOKEN (getBmcComplaints): $token');
-    print('URL: $url');
     final response = await http.get(
       Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (getBmcComplaints): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.cast<Map<String, dynamic>>();
@@ -205,7 +188,6 @@ class ApiService {
       }),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
 
-    print('Register Site Response: ${response.body}');
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       return jsonDecode(response.body) as Map<String, dynamic>;
@@ -270,10 +252,6 @@ class ApiService {
     if (siteId.isEmpty) throw Exception('Site ID is required');
     if (imageBytes == null) throw Exception('Image is required');
 
-    print('SITE ID: $siteId');
-    print('IMAGE PATH: $imagePath');
-    print('ACTUAL WASTE: $quantity');
-    print('DRIVER VERIFIED: $driverVerified');
 
     final request = http.MultipartRequest(
       'POST',
@@ -290,12 +268,9 @@ class ApiService {
       filename: imageName ?? 'photo.jpg',
     ));
 
-    print('Sending fields: ${request.fields}');
-    print('Sending file: ${imageName ?? 'photo.jpg'}');
 
     final streamed = await request.send();
     final responseBody = await streamed.stream.bytesToString();
-    print('Upload Response: $responseBody');
 
     if (streamed.statusCode == 200 || streamed.statusCode == 201) {
       final decoded = jsonDecode(responseBody);
@@ -312,7 +287,6 @@ class ApiService {
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
 
-    print('Proof history response: ${response.body}');
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -549,18 +523,14 @@ class ApiService {
   }) async {
     // BMC officials don't have a profile endpoint — return a stub
     if (role == 'bmc') {
-      print('TOKEN (BMC profile): $token');
       return {'name': 'BMC Official', 'contact': '', 'email': 'admin@bmc.gov'};
     }
     final endpoint = (role == 'citizen') ? 'citizen' : 'contractor';
     final url = '$_base/profile/$endpoint';
-    print('TOKEN ($role profile): $token');
-    print('URL: $url');
     final response = await http.get(
       Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (profile): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
@@ -592,14 +562,11 @@ class ApiService {
     if (address.isNotEmpty)     body['address']      = address;
 
     final url = '$_base/profile/$endpoint';
-    print('TOKEN ($role update profile): $token');
-    print('URL: $url');
     final response = await http.put(
       Uri.parse(url),
       headers: _authHeaders(token),
       body: jsonEncode(body),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (update profile): ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
@@ -618,18 +585,83 @@ class ApiService {
     }
     final endpoint = (role == 'citizen') ? 'citizen' : 'contractor';
     final url = '$_base/profile/$endpoint';
-    print('TOKEN ($role delete profile): $token');
-    print('URL: $url');
     final response = await http.delete(
       Uri.parse(url),
       headers: _authHeaders(token),
     ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
-    print('RESPONSE (delete profile): ${response.statusCode} ${response.body}');
     if (response.statusCode != 200) {
       if (response.statusCode == 401) {
         throw Exception('Session expired. Please login again.');
       }
       throw Exception(_errorMessage(response, 'Failed to delete account'));
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getPickupProofHistory({
+    String token = '',
+  }) async {
+    final url = '$_base/pickups/proof-history';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: _authHeaders(token),
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    }
+    if (response.statusCode == 401) {
+      throw Exception('Session expired. Please login again.');
+    }
+    throw Exception(_errorMessage(response, 'Failed to load proof history'));
+  }
+
+  // DRIVER LOCATION + RATING
+  static Future<void> updateDriverLocation({
+    required String driverId,
+    required double latitude,
+    required double longitude,
+    String token = '',
+  }) async {
+    final url = '$_base/driver/location';
+    await http.post(
+      Uri.parse(url),
+      headers: _authHeaders(token),
+      body: jsonEncode({
+        'driver_id': driverId,
+        'latitude': latitude,
+        'longitude': longitude,
+      }),
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+  }
+
+  static Future<Map<String, dynamic>?> getDriverLocation(String driverId, {String token = ''}) async {
+    final url = '$_base/driver/location/$driverId';
+    try {
+      final res = await http.get(
+        Uri.parse(url),
+        headers: _authHeaders(token),
+      ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+      if (res.statusCode == 200) return jsonDecode(res.body) as Map<String, dynamic>;
+      return null; // 404 = no location yet
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> submitDriverRating({
+    required String driverId,
+    required int rating,
+    String review = '',
+    String token = '',
+  }) async {
+    final url = '$_base/driver/rating';
+    final res = await http.post(
+      Uri.parse(url),
+      headers: _authHeaders(token),
+      body: jsonEncode({'driver_id': driverId, 'rating': rating, 'review': review}),
+    ).timeout(_timeout, onTimeout: () => throw const SocketException('Connection timed out.'));
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw Exception(_errorMessage(res, 'Failed to submit rating'));
     }
   }
 
@@ -671,8 +703,6 @@ class ApiService {
     if (pickupId.isEmpty) throw Exception('Pickup ID is required');
     if (imageBytes == null) throw Exception('Image is required');
 
-    print('PICKUP ID: $pickupId');
-    print('IMAGE PATH: $imagePath');
 
     final request = http.MultipartRequest(
       'POST',
@@ -688,12 +718,9 @@ class ApiService {
       filename: imageName ?? 'photo.jpg',
     ));
 
-    print('Sending fields: ${request.fields}');
-    print('Sending file: ${imageName ?? 'photo.jpg'}');
 
     final streamed = await request.send();
     final responseBody = await streamed.stream.bytesToString();
-    print('Upload Response: $responseBody');
 
     if (streamed.statusCode == 200 || streamed.statusCode == 201) {
       return true;
